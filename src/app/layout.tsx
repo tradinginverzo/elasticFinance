@@ -19,6 +19,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: "elasticFinance", template: "%s · elasticFinance" },
   description: "Finanzas personales y del hogar, con tus facturas.",
+  applicationName: "elasticFinance",
+  // iPhone: al añadirla a la pantalla de inicio se abre como app, sin la barra de Safari.
+  appleWebApp: {
+    capable: true,
+    title: "elasticFinance",
+    statusBarStyle: "default",
+  },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
