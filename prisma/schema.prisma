@@ -1,0 +1,198 @@
+// Esquema de elasticFinance.
+//
+// Modelo mixto de datos:
+// - Cada usuario tiene un espacio PERSONAL (solo él lo ve).
+// - Puede pertenecer además a espacios SHARED (p. ej. "Hogar"), donde todos los miembros
+//   ven y registran las mismas cuentas, transacciones y facturas.
+// Todo dato financiero pertenece a un espacio (workspace_id) y guarda quién lo creó (created_by_id).
+//
+// Los usuarios viven en Supabase Auth (auth.users); `profiles` guarda sus datos visibles con el mismo id.
+// Los montos se guardan como enteros en centavos (BigInt) junto a su moneda ISO 4217.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceKind {
+  PERSONAL
+  SHARED
+}
+
+enum WorkspaceRole {
+  OWNER // puede invitar/quitar miembros y borrar el espacio
+  MEMBER
+}
+
+enum AccountType {
+  CASH
+  BANK
+  CREDIT_CARD
+  SAVINGS
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+}
+
+enum ReceiptStatus {
+  UPLOADED // archivo subido, sin procesar
+  PROCESSING // la IA lo está leyendo
+  PROCESSED // datos extraídos, pendientes de revisión
+  CONFIRMED // el usuario confirmó y se creó la transacción
+  FAILED // la extracción falló
+}
+
+enum CaptureSessionStatus {
+  WAITING // QR mostrado en la PC, esperando la foto
+  UPLOADED // el teléfono subió la foto
+  COMPLETED // la PC ya la recibió
+  EXPIRED
+}
+
+model Profile {
+  id          String   @id @db.Uuid // = auth.users.id
+  email       String   @unique
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  memberships         WorkspaceMember[]
+  createdTransactions Transaction[]
+  uploadedReceipts    Receipt[]
+  captureSessions     CaptureSession[]
+
+  @@map("profiles")
+}
+
+model Workspace {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String
+  kind      WorkspaceKind
+  currency  String        @default("USD") @db.Char(3) // moneda por defecto del espacio
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  members         WorkspaceMember[]
+  accounts        Account[]
+  categories      Category[]
+  transactions    Transaction[]
+  receipts        Receipt[]
+  captureSessions CaptureSession[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model Account {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @map("workspace_id") @db.Uuid
+  name        String
+  type        AccountType
+  currency    String      @db.Char(3)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([workspaceId])
+  @@map("accounts")
+}
+
+model Category {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @map("workspace_id") @db.Uuid
+  name        String
+  type        TransactionType
+  icon        String?
+  color       String?
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([workspaceId, name, type])
+  @@map("categories")
+}
+
+model Transaction {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @map("workspace_id") @db.Uuid
+  createdById String          @map("created_by_id") @db.Uuid
+  accountId   String          @map("account_id") @db.Uuid
+  categoryId  String?         @map("category_id") @db.Uuid
+  type        TransactionType
+  amountCents BigInt          @map("amount_cents") // siempre positivo; el signo lo da `type`
+  currency    String          @db.Char(3)
+  date        DateTime        @db.Date
+  merchant    String?
+  notes       String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy Profile   @relation(fields: [createdById], references: [id])
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  receipts  Receipt[]
+
+  @@index([workspaceId, date(sort: Desc)])
+  @@map("transactions")
+}
+
+model Receipt {
+  id            String        @id @default(uuid()) @db.Uuid
+  workspaceId   String        @map("workspace_id") @db.Uuid
+  uploadedById  String        @map("uploaded_by_id") @db.Uuid
+  transactionId String?       @map("transaction_id") @db.Uuid
+  storagePath   String        @map("storage_path") // ruta dentro del bucket privado "receipts"
+  mimeType      String        @map("mime_type")
+  sizeBytes     Int           @map("size_bytes")
+  status        ReceiptStatus @default(UPLOADED)
+  extractedData Json?         @map("extracted_data") // lo que devolvió la IA
+  error         String?
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy     Profile         @relation(fields: [uploadedById], references: [id])
+  transaction    Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  captureSession CaptureSession?
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("receipts")
+}
+
+// Sesión para subir una factura desde el teléfono escaneando un QR en la PC.
+model CaptureSession {
+  id          String               @id @default(uuid()) @db.Uuid
+  workspaceId String               @map("workspace_id") @db.Uuid // espacio donde se guardará la factura
+  userId      String               @map("user_id") @db.Uuid
+  tokenHash   String               @unique @map("token_hash") // nunca guardamos el token en claro
+  status      CaptureSessionStatus @default(WAITING)
+  receiptId   String?              @unique @map("receipt_id") @db.Uuid
+  expiresAt   DateTime             @map("expires_at") @db.Timestamptz
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receipt   Receipt?  @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("capture_sessions")
+}
