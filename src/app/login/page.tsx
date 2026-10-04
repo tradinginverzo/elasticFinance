@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { EnvBadge } from "@/components/env-badge";
 import { Logo } from "@/components/logo";
 import {
   Card,
@@ -22,7 +23,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-12">
-      <Logo />
+      <div className="flex items-center gap-2">
+        <Logo />
+        <EnvBadge />
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Entrar</CardTitle>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EnvBadge } from "@/components/env-badge";
 import { Logo } from "@/components/logo";
 import { requireProfile } from "@/lib/auth";
 import { getActiveWorkspace, listWorkspaces } from "@/lib/workspaces";
@@ -21,6 +22,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <Link href="/" className="hidden sm:block">
             <Logo />
           </Link>
+          <EnvBadge />
           <WorkspaceSwitcher
             workspaces={workspaces.map(({ id, name, kind }) => ({ id, name, kind }))}
             activeId={active.id}

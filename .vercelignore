@@ -1,0 +1,8 @@
+# Archivos que no se suben al publicar con `vercel deploy`.
+# Las claves viven en las variables de entorno del proyecto en Vercel, nunca en archivos.
+.env*
+!.env.example
+.claude
+node_modules
+.next
+src/generated
