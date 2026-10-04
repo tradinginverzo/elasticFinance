@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Logo } from "@/components/logo";
@@ -9,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
+import { isPasswordResetRequired } from "@/lib/password-reset";
 
 import { signOut } from "../(app)/actions";
 
@@ -21,6 +23,7 @@ export const metadata = { title: "Nueva contraseña" };
 export default async function ResetPasswordPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?error=link");
+  const resetRequired = await isPasswordResetRequired();
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-12">
@@ -34,14 +37,24 @@ export default async function ResetPasswordPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ResetPasswordForm />
-          <form action={signOut} className="text-center">
-            <button
-              type="submit"
-              className="text-sm text-muted-foreground hover:text-foreground"
+          {resetRequired ? (
+            // Entró con un enlace de recuperación: no puede volver a la app sin cambiarla.
+            <form action={signOut} className="text-center">
+              <button
+                type="submit"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancelar y cerrar sesión
+              </button>
+            </form>
+          ) : (
+            <Link
+              href="/"
+              className="text-center text-sm text-muted-foreground hover:text-foreground"
             >
-              Cancelar y cerrar sesión
-            </button>
-          </form>
+              Cancelar
+            </Link>
+          )}
         </CardContent>
       </Card>
     </main>

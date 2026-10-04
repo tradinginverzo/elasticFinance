@@ -3,18 +3,17 @@ import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
-import { db } from "@/lib/db";
+import { requireProfile } from "@/lib/auth";
 
 export const ACTIVE_WORKSPACE_COOKIE = "ef-workspace";
 
-// Espacios a los que pertenece el usuario: primero el personal, luego los compartidos por nombre.
+// Espacios del usuario actual: primero el personal, luego los compartidos por nombre.
+// Salen del mismo perfil que carga requireProfile(), sin otra consulta a la base.
 export const listWorkspaces = cache(async (userId: string) => {
-  const memberships = await db.workspaceMember.findMany({
-    where: { userId },
-    include: { workspace: true },
-  });
+  const profile = await requireProfile();
+  if (profile.id !== userId) throw new Error("listWorkspaces: solo para el usuario actual");
 
-  return memberships
+  return profile.memberships
     .map((m) => ({ ...m.workspace, role: m.role }))
     .sort((a, b) =>
       a.kind === b.kind

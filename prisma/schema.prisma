@@ -56,11 +56,12 @@ enum CaptureSessionStatus {
 }
 
 model Profile {
-  id          String   @id @db.Uuid // = auth.users.id
-  email       String   @unique
-  displayName String?  @map("display_name")
-  avatarUrl   String?  @map("avatar_url")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id        String   @id @db.Uuid // = auth.users.id
+  email     String   @unique
+  firstName String?  @map("first_name")
+  lastName  String?  @map("last_name")
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   memberships         WorkspaceMember[]
   createdTransactions Transaction[]
@@ -81,6 +82,7 @@ model Workspace {
   accounts        Account[]
   categories      Category[]
   transactions    Transaction[]
+  templates       TransactionTemplate[]
   receipts        Receipt[]
   captureSessions CaptureSession[]
 
@@ -102,15 +104,18 @@ model WorkspaceMember {
 }
 
 model Account {
-  id          String      @id @default(uuid()) @db.Uuid
-  workspaceId String      @map("workspace_id") @db.Uuid
-  name        String
-  type        AccountType
-  currency    String      @db.Char(3)
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  id                  String      @id @default(uuid()) @db.Uuid
+  workspaceId         String      @map("workspace_id") @db.Uuid
+  name                String
+  type                AccountType
+  currency            String      @db.Char(3)
+  // Saldo que tenía la cuenta al empezar a usar la app. Saldo actual = inicial + ingresos − gastos.
+  initialBalanceCents BigInt      @default(0) @map("initial_balance_cents")
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  templates    TransactionTemplate[]
 
   @@index([workspaceId])
   @@map("accounts")
@@ -124,36 +129,65 @@ model Category {
   icon        String?
   color       String?
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  templates    TransactionTemplate[]
 
   @@unique([workspaceId, name, type])
   @@map("categories")
 }
 
 model Transaction {
-  id          String          @id @default(uuid()) @db.Uuid
-  workspaceId String          @map("workspace_id") @db.Uuid
-  createdById String          @map("created_by_id") @db.Uuid
-  accountId   String          @map("account_id") @db.Uuid
-  categoryId  String?         @map("category_id") @db.Uuid
-  type        TransactionType
-  amountCents BigInt          @map("amount_cents") // siempre positivo; el signo lo da `type`
-  currency    String          @db.Char(3)
-  date        DateTime        @db.Date
-  merchant    String?
-  notes       String?
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  id                  String          @id @default(uuid()) @db.Uuid
+  workspaceId         String          @map("workspace_id") @db.Uuid
+  createdById         String          @map("created_by_id") @db.Uuid
+  accountId           String          @map("account_id") @db.Uuid
+  categoryId          String?         @map("category_id") @db.Uuid
+  type                TransactionType
+  amountCents         BigInt          @map("amount_cents") // siempre positivo; el signo lo da `type`
+  currency            String          @db.Char(3)
+  date                DateTime        @db.Date
+  merchant            String?
+  notes               String?
+  templateId          String?         @map("template_id") @db.Uuid // gasto fijo del que salió, si lo hay
+  // Monto habitual del gasto fijo al registrarlo: para marcar si este mes fue distinto
+  // sin que un cambio posterior del monto habitual altere los meses anteriores.
+  templateAmountCents BigInt?         @map("template_amount_cents")
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy Profile   @relation(fields: [createdById], references: [id])
-  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy Profile              @relation(fields: [createdById], references: [id])
+  template  TransactionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  account   Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category  Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   receipts  Receipt[]
 
   @@index([workspaceId, date(sort: Desc)])
+  @@index([templateId, date])
   @@map("transactions")
+}
+
+// Gasto (o ingreso) fijo guardado: alquiler, luz, sueldo… Sirve de plantilla para
+// registrar el movimiento de cada mes; el monto se puede cambiar al registrarlo.
+model TransactionTemplate {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @map("workspace_id") @db.Uuid
+  name        String
+  type        TransactionType
+  amountCents BigInt          @map("amount_cents") // monto habitual
+  accountId   String?         @map("account_id") @db.Uuid
+  categoryId  String?         @map("category_id") @db.Uuid
+  merchant    String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([workspaceId])
+  @@map("transaction_templates")
 }
 
 model Receipt {

@@ -12,7 +12,11 @@
     "db:deploy": "prisma migrate deploy",
     "db:deploy:prod": "node scripts/deploy-prod-db.mjs",
     "db:studio": "prisma studio",
-    "setup:storage": "node --env-file=.env.local scripts/setup-storage.mjs"
+    "setup:storage": "node --env-file=.env.local scripts/setup-storage.mjs",
+    "templates:export": "node --env-file=.env.local scripts/templates-backup.mjs export",
+    "templates:import:prod": "node --env-file=.env.prod scripts/templates-backup.mjs import",
+    "user:password": "node --env-file=.env.local scripts/set-password.mjs",
+    "user:password:prod": "node --env-file=.env.prod scripts/set-password.mjs --prod"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -28,6 +32,7 @@
     "pg": "^8.23.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "recharts": "^3.10.1",
     "server-only": "^0.0.1",
     "shadcn": "^4.21.1",
     "sonner": "^2.0.8",
