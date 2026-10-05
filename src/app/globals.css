@@ -143,4 +143,18 @@
   html {
     @apply font-sans;
   }
+  /* Safari en iPhone da a los campos de fecha un ancho mínimo propio e ignora el width:
+     en una columna estrecha se desbordan sobre el campo de al lado. Sin el estilo nativo
+     respetan su columna; el selector de fecha del sistema sigue abriéndose al tocarlos. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-height: 1.5em; /* evita que el campo vacío se aplaste en iOS */
+  }
 }

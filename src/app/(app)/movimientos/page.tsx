@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { FixedComparison } from "@/components/fixed-comparison";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCategories } from "@/lib/categories";
@@ -94,6 +95,13 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
         <Stat label="Gastos" value={formatCents(expense, workspace.currency)} className="text-expense" />
         <Stat label="Balance" value={formatCents(income - expense, workspace.currency)} />
       </div>
+
+      <FixedComparison
+        variant="month"
+        income={Number(income)}
+        expense={Number(expense)}
+        currency={workspace.currency}
+      />
 
       {transactions.length === 0 ? (
         <Card>
