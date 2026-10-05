@@ -475,7 +475,7 @@ function SimulatorForm({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
       {/* ── Formulario ─────────────────────────────────────────────── */}
       <form autoComplete="off" onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-6">
         <Card>
@@ -727,7 +727,7 @@ function SimulatorForm({
 
             <Alerts result={result} fmt={fmt} />
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {result.credit && (
                 <>
                   <Stat label="Cuota mensual" value={fmt(result.credit.installmentAmount)} hint={`Hasta ${monthLabel(result.credit.lastMonth)}`} />

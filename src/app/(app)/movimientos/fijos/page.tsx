@@ -82,7 +82,7 @@ export default async function TemplatesPage() {
       ) : (
         <>
           <Card>
-            <CardContent className="grid gap-5 sm:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
                 <p className="text-sm text-muted-foreground">Gastos fijos al mes</p>
                 <p className="text-3xl font-semibold tracking-tight tabular-nums">
