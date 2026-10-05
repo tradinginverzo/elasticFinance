@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, ChevronLeftIcon, PinIcon, PlusIcon } from "lucide-react";
+import { CheckCircle2Icon, ChevronLeftIcon, CopyIcon, PinIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 
 import { FixedComparison } from "@/components/fixed-comparison";
@@ -35,14 +35,28 @@ export default async function TemplatesPage() {
         </Link>
         <div className="flex items-end justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">Gastos fijos</h1>
-          <Button
-            render={<Link href="/movimientos/fijos/nuevo" />}
-            nativeButton={false}
-            className="h-9"
-          >
-            <PlusIcon />
-            Nuevo
-          </Button>
+          <div className="flex gap-2">
+            {templates.length > 0 && (
+              <Button
+                variant="outline"
+                render={<Link href="/movimientos/fijos/copiar" />}
+                nativeButton={false}
+                className="h-9"
+                aria-label="Copiar a otro espacio"
+              >
+                <CopyIcon />
+                <span className="hidden sm:inline">Copiar a otro espacio</span>
+              </Button>
+            )}
+            <Button
+              render={<Link href="/movimientos/fijos/nuevo" />}
+              nativeButton={false}
+              className="h-9"
+            >
+              <PlusIcon />
+              Nuevo
+            </Button>
+          </div>
         </div>
       </div>
 

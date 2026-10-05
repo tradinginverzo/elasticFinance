@@ -16,6 +16,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import pg from "pg";
 
+// Mismas categorías por defecto que crea la app (src/lib/categories.ts).
+const DEFAULT_CATEGORIES = JSON.parse(
+  readFileSync(new URL("../src/lib/default-categories.json", import.meta.url), "utf8"),
+);
+
 const [command, ...rest] = process.argv.slice(2);
 const arg = (name) => {
   const i = rest.indexOf(`--${name}`);
@@ -66,20 +71,27 @@ try {
     if (!file) throw new Error("Falta --file con el respaldo a importar.");
     const { templates } = JSON.parse(readFileSync(file, "utf8"));
 
-    const [{ rows: existing }, { rows: categories }, { rows: accounts }] = await Promise.all([
-      client.query("select name, type from transaction_templates where workspace_id = $1", [workspaceId]),
-      client.query("select id, name, type from categories where workspace_id = $1", [workspaceId]),
-      client.query("select id, name from accounts where workspace_id = $1", [workspaceId]),
-    ]);
-    // Las categorías por defecto se crean al abrir un formulario por primera vez, solo si el
-    // espacio no tiene ninguna (src/lib/categories.ts). Si creáramos aquí alguna antes,
-    // las demás ya no se crearían: pedimos abrir la app primero.
-    if (categories.length === 0) {
-      throw new Error(
-        "Ese espacio aún no tiene categorías. Abre una vez en la app «+ Nuevo movimiento» " +
-          "(se crean las categorías por defecto) y vuelve a ejecutar este comando.",
-      );
-    }
+    // Consultas una tras otra: una misma conexión de pg no admite consultas en paralelo.
+    const { rows: existing } = await client.query(
+      "select name, type from transaction_templates where workspace_id = $1",
+      [workspaceId],
+    );
+    const { rows: categories } = await client.query(
+      "select id, name, type from categories where workspace_id = $1",
+      [workspaceId],
+    );
+    const { rows: accounts } = await client.query(
+      "select id, name from accounts where workspace_id = $1",
+      [workspaceId],
+    );
+    // Si el espacio aún no tiene categorías, creamos primero las de por defecto (las mismas que
+    // crea la app en src/lib/categories.ts). Si solo creáramos las del respaldo, la app ya no
+    // crearía las demás, porque solo lo hace cuando el espacio no tiene ninguna.
+    const defaultsToCreate =
+      categories.length === 0
+        ? DEFAULT_CATEGORIES.map((c) => ({ ...c, id: randomUUID() }))
+        : [];
+    categories.push(...defaultsToCreate);
     const key = (name, type) => `${type}:${name.trim().toLowerCase()}`;
     const existingKeys = new Set(existing.map((t) => key(t.name, t.type)));
     const categoryByKey = new Map(categories.map((c) => [key(c.name, c.type), c.id]));
@@ -104,11 +116,21 @@ try {
     );
     const toCopy = plan.filter((t) => !t.skip);
 
+    if (defaultsToCreate.length > 0) {
+      console.log(`\nEl espacio no tenía categorías: se crearán las ${defaultsToCreate.length} categorías por defecto.`);
+    }
+
     if (!apply) {
       console.log(`\nVista previa: se copiarían ${toCopy.length} de ${plan.length}. No se escribió nada.`);
       console.log("Para copiarlos de verdad, repite el comando añadiendo --apply");
     } else {
       await client.query("begin");
+      for (const c of defaultsToCreate) {
+        await client.query(
+          "insert into categories (id, workspace_id, name, type, icon) values ($1, $2, $3, $4, $5)",
+          [c.id, workspaceId, c.name, c.type, c.icon],
+        );
+      }
       for (const t of toCopy) {
         let categoryId = t.categoryId;
         if (t.categoryName && !categoryId) {

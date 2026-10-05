@@ -1,0 +1,15 @@
+[
+  { "name": "Comida", "type": "EXPENSE", "icon": "utensils" },
+  { "name": "Supermercado", "type": "EXPENSE", "icon": "shopping-cart" },
+  { "name": "Transporte", "type": "EXPENSE", "icon": "car" },
+  { "name": "Hogar", "type": "EXPENSE", "icon": "home" },
+  { "name": "Servicios", "type": "EXPENSE", "icon": "zap" },
+  { "name": "Salud", "type": "EXPENSE", "icon": "heart-pulse" },
+  { "name": "Ocio", "type": "EXPENSE", "icon": "party-popper" },
+  { "name": "Compras", "type": "EXPENSE", "icon": "shopping-bag" },
+  { "name": "Educación", "type": "EXPENSE", "icon": "graduation-cap" },
+  { "name": "Otros gastos", "type": "EXPENSE", "icon": "circle-ellipsis" },
+  { "name": "Sueldo", "type": "INCOME", "icon": "briefcase" },
+  { "name": "Ingreso extra", "type": "INCOME", "icon": "sparkles" },
+  { "name": "Otros ingresos", "type": "INCOME", "icon": "circle-ellipsis" }
+]
