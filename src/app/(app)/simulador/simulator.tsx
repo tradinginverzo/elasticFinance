@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertTriangleIcon, InfoIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { AlertTriangleIcon, ArrowDownIcon, ArrowUpIcon, InfoIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 
+import { CategoryBadge } from "@/components/category-badge";
 import { FixedComparison } from "@/components/fixed-comparison";
 import { NativeSelect } from "@/components/native-select";
 import { Segmented } from "@/components/segmented";
@@ -55,42 +56,118 @@ function monthLabel(index: number) {
 
 const sum = (items: { amount: number }[]) => items.reduce((s, t) => s + t.amount, 0);
 
-export function Simulator({
+// Orden de las listas de gastos/ingresos fijos del simulador (gastos e ingresos van siempre
+// agrupados por separado; el orden se aplica dentro de cada grupo).
+type SortBy = "amount" | "name" | "category";
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: "amount", label: "Monto" },
+  { value: "name", label: "Nombre" },
+  { value: "category", label: "Categoría" },
+];
+
+type SortDir = "asc" | "desc";
+// Dirección con la que empieza cada criterio al elegirlo (el monto, de mayor a menor).
+const DEFAULT_DIR: Record<SortBy, SortDir> = { amount: "desc", name: "asc", category: "asc" };
+
+// asc: monto de menor a mayor / nombre o categoría A→Z. desc: al revés.
+// En empates, por nombre A→Z. Los que no tienen categoría van al final.
+function sortTemplates<T extends { name: string; amount: number; categoryName: string | null }>(
+  items: T[],
+  sortBy: SortBy,
+  dir: SortDir,
+) {
+  const sign = dir === "asc" ? 1 : -1;
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, "es");
+  const byCategory = (a: T, b: T) =>
+    a.categoryName === b.categoryName
+      ? 0
+      : a.categoryName === null
+        ? 1
+        : b.categoryName === null
+          ? -1
+          : sign * a.categoryName.localeCompare(b.categoryName, "es");
+  const primary = (a: T, b: T) =>
+    sortBy === "amount" ? sign * (a.amount - b.amount) : sortBy === "name" ? sign * byName(a, b) : byCategory(a, b);
+  return [...items].sort((a, b) => primary(a, b) || byName(a, b));
+}
+
+function SortSelect({
+  value,
+  dir,
+  onChange,
+}: {
+  value: SortBy;
+  dir: SortDir;
+  onChange: (value: SortBy, dir: SortDir) => void;
+}) {
+  const DirIcon = dir === "asc" ? ArrowUpIcon : ArrowDownIcon;
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <label className="flex items-center gap-1">
+        Ordenar:
+        <select
+          value={value}
+          onChange={(e) => {
+            const next = e.target.value as SortBy;
+            onChange(next, DEFAULT_DIR[next]);
+          }}
+          className="rounded-md bg-transparent py-0.5 font-medium text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        onClick={() => onChange(value, dir === "asc" ? "desc" : "asc")}
+        aria-label={dir === "asc" ? "Orden ascendente. Cambiar a descendente" : "Orden descendente. Cambiar a ascendente"}
+        title={dir === "asc" ? "Ascendente" : "Descendente"}
+        className="flex size-6 items-center justify-center rounded-md text-foreground hover:bg-muted"
+      >
+        <DirIcon className="size-3.5" />
+      </button>
+    </span>
+  );
+}
+
+type SimulatorProps = { baseline: Baseline; currency: string; workspaceName: string };
+
+// "Reiniciar" vuelve a montar el simulador desde cero: así todo (escenario y "Tu situación")
+// recupera sus valores iniciales sin tener que restablecer cada campo a mano.
+export function Simulator(props: SimulatorProps) {
+  const [resetCount, setResetCount] = useState(0);
+  return <SimulatorForm key={resetCount} {...props} onReset={() => setResetCount((n) => n + 1)} />;
+}
+
+function SimulatorForm({
   baseline,
   currency,
   workspaceName,
-}: {
-  baseline: Baseline;
-  currency: string;
-  workspaceName: string;
-}) {
+  onReset,
+}: SimulatorProps & { onReset: () => void }) {
   const fmt = (cents: number) => formatAmount(cents, currency);
 
   // ── Tu situación (precargada con tus datos, editable) ──
   const [balance, setBalance] = useState(centsToInput(BigInt(baseline.balance)));
   const [otherIncome, setOtherIncome] = useState(centsToInput(BigInt(baseline.otherIncome)));
   const [otherExpense, setOtherExpense] = useState(centsToInput(BigInt(baseline.otherExpense)));
-  // Gastos/ingresos fijos pendientes de este mes que el usuario quitó con ✕.
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
-  const fixedIncomes = baseline.templates.filter((t) => t.type === "INCOME");
-  const fixedExpenses = baseline.templates.filter((t) => t.type === "EXPENSE");
-  const pending = baseline.templates.filter((t) => t.pending);
-  const pendingIncluded = pending.filter((t) => !excluded.has(t.id));
-  // Lo que aún entra/sale este mes por fijos sin registrar (ya registrados = ya están en el saldo).
-  const pendingNet = pendingIncluded.reduce(
-    (s, t) => s + (t.type === "INCOME" ? t.amount : -t.amount),
-    0,
-  );
-
-  function toggleExcluded(id: string) {
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const [sortBy, setSortBy] = useState<SortBy>("amount");
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_DIR.amount);
+  const sorted = sortTemplates(baseline.templates, sortBy, sortDir);
+  function changeSort(by: SortBy, dir: SortDir) {
+    setSortBy(by);
+    setSortDir(dir);
   }
+  const fixedIncomes = sorted.filter((t) => t.type === "INCOME");
+  const fixedExpenses = sorted.filter((t) => t.type === "EXPENSE");
+  const pending = sorted.filter((t) => t.pending);
+  // Lo que aún entra/sale este mes por fijos sin registrar (ya registrados = ya están en el saldo).
+  // Si ya pagaste uno, lo correcto es registrarlo en Movimientos: así deja de estar pendiente.
+  const pendingNet = pending.reduce((s, t) => s + (t.type === "INCOME" ? t.amount : -t.amount), 0);
 
   // ── Escenario ──
   const [kind, setKind] = useState<Kind>("purchase");
@@ -104,11 +181,21 @@ export function Simulator({
   const [firstMonth, setFirstMonth] = useState<"0" | "1">("1");
   const [recurrence, setRecurrence] = useState<"once" | "monthly">("once");
   const [incomeMonths, setIncomeMonths] = useState("");
-  const [recurringAction, setRecurringAction] = useState<RecurringAction>("add");
-  const [cancelId, setCancelId] = useState(fixedExpenses[0]?.id ?? "");
+  const [recurringAction, setRecurringAction] = useState<RecurringAction>("cancel");
+  // Gastos fijos que el usuario marca para simular dejar de pagarlos (puede ser varios).
+  const [cancelIds, setCancelIds] = useState<Set<string>>(new Set());
   const [horizon, setHorizon] = useState<"6" | "12" | "24">("12");
 
-  const cancelTemplate = fixedExpenses.find((t) => t.id === cancelId);
+  const cancelTemplates = fixedExpenses.filter((t) => cancelIds.has(t.id));
+  const cancelTotal = sum(cancelTemplates);
+  function toggleCancel(id: string) {
+    setCancelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Cálculo barato: se rehace en cada render (React Compiler se encarga de optimizar).
   const computed = (() => {
@@ -117,7 +204,7 @@ export function Simulator({
     const otherExpenseCents = parseOptional(otherExpense);
     const amountCents =
       kind === "recurring" && recurringAction === "cancel"
-        ? (cancelTemplate?.amount ?? 0)
+        ? cancelTotal
         : parseOptional(amount);
     const down = parseOptional(downPayment);
     const n = Number(installments);
@@ -194,8 +281,17 @@ export function Simulator({
   const monthlySavings = monthlyIncome - monthlyExpense;
   // Monto mensual del gasto fijo que se añade o se cancela.
   const recurringMonthly =
-    recurringAction === "cancel" ? (cancelTemplate?.amount ?? 0) : (parseOptional(amount) ?? 0);
+    recurringAction === "cancel" ? cancelTotal : (parseOptional(amount) ?? 0);
   const horizonLabel = HORIZON_OPTIONS.find((h) => h.value === horizon)!.label;
+  // Simular cancelar/añadir un gasto fijo: lo reflejamos también en "Tu situación".
+  const simulatedCancelIds =
+    kind === "recurring" && recurringAction === "cancel" ? cancelIds : new Set<string>();
+  // "Gym", "Gym y Netflix", "Gym, Netflix y Spotify" (para explicar la comparación).
+  const cancelNames = new Intl.ListFormat("es", { type: "conjunction" }).format(
+    cancelTemplates.map((t) => t.name),
+  );
+  const simulatedSavingsChange =
+    kind === "recurring" ? (recurringAction === "cancel" ? recurringMonthly : -recurringMonthly) : 0;
 
   const labels =
     kind === "purchase"
@@ -204,7 +300,179 @@ export function Simulator({
         ? { baseline: "Sin el ingreso", withScenario: "Con el ingreso" }
         : recurringAction === "add"
           ? { baseline: "Sin el gasto nuevo", withScenario: "Con el gasto nuevo" }
-          : { baseline: "Si lo mantienes", withScenario: "Si lo cancelas" };
+          : cancelTemplates.length === 1
+            ? { baseline: "Si sigues pagándolo", withScenario: "Si lo quitas" }
+            : { baseline: "Si sigues pagándolos", withScenario: "Si los quitas" };
+
+  // ¿Cambió algo respecto a cómo se abrió el simulador? (el orden de la lista no cuenta)
+  const isDirty =
+    balance !== centsToInput(BigInt(baseline.balance)) ||
+    otherIncome !== centsToInput(BigInt(baseline.otherIncome)) ||
+    otherExpense !== centsToInput(BigInt(baseline.otherExpense)) ||
+    kind !== "purchase" ||
+    amount !== "" ||
+    payment !== "cash" ||
+    downPayment !== "" ||
+    installments !== "12" ||
+    creditInput !== "installment" ||
+    installmentAmount !== "" ||
+    rate !== "" ||
+    firstMonth !== "1" ||
+    recurrence !== "once" ||
+    incomeMonths !== "" ||
+    recurringAction !== "cancel" ||
+    cancelIds.size > 0 ||
+    horizon !== "12";
+
+  // Elegir qué gastos fijos quitar se hace con casillas en la lista única de fijos (abajo).
+  const selectingCancel = kind === "recurring" && recurringAction === "cancel";
+  const addedAmount = kind === "recurring" && recurringAction === "add" ? recurringMonthly : 0;
+
+  const situationCard = (
+    <Card>
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <h2 className="font-medium">Tu situación</h2>
+          <p className="text-xs text-muted-foreground">
+            {baseline.source === "average"
+              ? `Con tus gastos fijos y el promedio de tus últimos ${baseline.monthsUsed === 1 ? "mes" : `${baseline.monthsUsed} meses`} en ${workspaceName}. Puedes ajustarlo.`
+              : baseline.source === "current-month"
+                ? `Con tus gastos fijos y lo que llevas este mes en ${workspaceName}. Ajústalo si el mes no está completo.`
+                : "Con tus gastos fijos. Escribe también lo que sueles gastar e ingresar aparte."}
+          </p>
+        </div>
+
+        <AmountField id="balance" label="Saldo en tus cuentas" value={balance} onChange={setBalance} invalid={invalid.has("balance")} />
+
+        {baseline.templates.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Tus gastos e ingresos fijos</Label>
+              <SortSelect value={sortBy} dir={sortDir} onChange={changeSort} />
+            </div>
+
+            {selectingCancel && (
+              <p className="rounded-lg bg-series-2/10 px-3 py-2 text-xs">
+                Marca las casillas de los gastos que dejarías de pagar.
+                {cancelIds.size > 0 && (
+                  <>
+                    {" "}
+                    <QuickAction onClick={() => setCancelIds(new Set())}>Desmarcar todos</QuickAction>
+                  </>
+                )}
+              </p>
+            )}
+
+            {pending.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {pending.length} sin registrar en {formatMonth(currentMonth())} (
+                <span className="rounded bg-amber-500/15 px-1 text-amber-700 dark:text-amber-400">pendiente</span>
+                ). Si ya pagaste alguno, regístralo en Movimientos.
+              </p>
+            )}
+
+            {/* Una sola lista: agrupada por tipo, con el orden elegido dentro de cada grupo. */}
+            <div className="overflow-hidden rounded-xl border text-sm">
+              {PENDING_GROUPS.map(({ type: groupType, label: groupLabel }) => {
+                const items = sorted.filter((t) => t.type === groupType);
+                const extra = groupType === "EXPENSE" ? addedAmount : 0;
+                if (items.length === 0 && extra === 0) return null;
+                const total = sum(items);
+                const simulatedTotal = total - sum(items.filter((t) => simulatedCancelIds.has(t.id))) + extra;
+                return (
+                  <section key={groupType} className="border-b last:border-b-0">
+                    <h3 className="flex items-center justify-between gap-2 bg-muted/50 px-3 py-1.5 text-xs font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <span aria-hidden className={cn("size-2 rounded-full", groupType === "EXPENSE" ? "bg-expense" : "bg-income")} />
+                        {groupLabel} al mes
+                        <span className="font-normal text-muted-foreground">({items.length})</span>
+                      </span>
+                      <span className={cn("tabular-nums", groupType === "EXPENSE" ? "text-expense" : "text-income")}>
+                        {simulatedTotal !== total && (
+                          <span className="font-normal text-muted-foreground line-through">{fmt(total)} </span>
+                        )}
+                        {groupType === "EXPENSE" ? "−" : "+"}
+                        {fmt(simulatedTotal)}
+                      </span>
+                    </h3>
+                    <ul className="divide-y">
+                      {items.map((t) => (
+                        <FixedRow
+                          key={t.id}
+                          template={t}
+                          fmt={fmt}
+                          selectable={selectingCancel && t.type === "EXPENSE"}
+                          cancelled={simulatedCancelIds.has(t.id)}
+                          onToggleCancel={() => toggleCancel(t.id)}
+                        />
+                      ))}
+                      {extra > 0 && (
+                        <li className="flex items-center gap-2 py-1.5 pr-3 pl-3">
+                          <span className="min-w-0 flex-1 truncate">Gasto nuevo</span>
+                          <SimulatedTag>simulado</SimulatedTag>
+                          <span className="text-expense tabular-nums">−{fmt(extra)}</span>
+                        </li>
+                      )}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
+
+            {pending.length > 0 && (
+              <div className="flex flex-col rounded-xl bg-muted/60 px-3 py-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm">Disponible hoy</span>
+                  <span className={cn("font-semibold tabular-nums", available < 0 && "text-expense")}>{fmt(available)}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Tu saldo {pendingNet < 0 ? "menos" : "más"} los fijos pendientes de este mes ({pendingNet < 0 ? "−" : "+"}
+                  {fmt(Math.abs(pendingNet))}).
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 border-t pt-4">
+          <p className="text-sm font-medium">Cada mes</p>
+          <FixedComparison
+            income={sum(fixedIncomes)}
+            expense={sum(fixedExpenses) - simulatedSavingsChange}
+            currency={currency}
+            simulated={simulatedSavingsChange !== 0}
+          />
+          <AmountField id="otherIncome" label="Otros ingresos (promedio)" value={otherIncome} onChange={setOtherIncome} invalid={invalid.has("otherIncome")} />
+          <AmountField id="otherExpense" label="Otros gastos (promedio)" value={otherExpense} onChange={setOtherExpense} invalid={invalid.has("otherExpense")} />
+          <div className="flex flex-col gap-1 rounded-xl bg-muted/60 px-3 py-2 text-sm">
+            <div className="flex items-baseline justify-between">
+              <span>Ahorro mensual{simulatedSavingsChange !== 0 && <span className="text-muted-foreground"> hoy</span>}</span>
+              <span className={cn("font-semibold tabular-nums", monthlySavings < 0 ? "text-expense" : "text-income")}>
+                {monthlySavings < 0 ? "−" : "+"}
+                {fmt(Math.abs(monthlySavings))}
+              </span>
+            </div>
+            {simulatedSavingsChange !== 0 && (
+              <div className="flex items-baseline justify-between border-t border-border/60 pt-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-0.5 w-3 rounded-full bg-series-2" aria-hidden />
+                  Con la simulación
+                </span>
+                <span className={cn("font-semibold tabular-nums", monthlySavings + simulatedSavingsChange < 0 ? "text-expense" : "text-income")}>
+                  {monthlySavings + simulatedSavingsChange < 0 ? "−" : "+"}
+                  {fmt(Math.abs(monthlySavings + simulatedSavingsChange))}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            «Otros» es todo lo que no es fijo (comida, salidas…). Se calcula como tu promedio total menos
+            los fijos.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
@@ -212,92 +480,19 @@ export function Simulator({
       <form autoComplete="off" onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-6">
         <Card>
           <CardContent className="flex flex-col gap-4">
-            <div>
-              <h2 className="font-medium">Tu situación</h2>
-              <p className="text-xs text-muted-foreground">
-                {baseline.source === "average"
-                  ? `Con tus gastos fijos y el promedio de tus últimos ${baseline.monthsUsed === 1 ? "mes" : `${baseline.monthsUsed} meses`} en ${workspaceName}. Puedes ajustarlo.`
-                  : baseline.source === "current-month"
-                    ? `Con tus gastos fijos y lo que llevas este mes en ${workspaceName}. Ajústalo si el mes no está completo.`
-                    : "Con tus gastos fijos. Escribe también lo que sueles gastar e ingresar aparte."}
-              </p>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-medium">¿Qué quieres simular?</h2>
+              {isDirty && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <RotateCcwIcon className="size-3.5" />
+                  Reiniciar
+                </button>
+              )}
             </div>
-
-            <AmountField id="balance" label="Saldo en tus cuentas" value={balance} onChange={setBalance} invalid={invalid.has("balance")} />
-
-            {pending.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between gap-2">
-                  <Label>
-                    Fijos sin registrar en {formatMonth(currentMonth())}
-                  </Label>
-                  <span className={cn("text-sm font-medium tabular-nums", pendingNet < 0 ? "text-expense" : pendingNet > 0 && "text-income")}>
-                    {pendingNet > 0 ? "+" : pendingNet < 0 ? "−" : ""}
-                    {fmt(Math.abs(pendingNet))}
-                  </span>
-                </div>
-                <ul className="divide-y rounded-xl border text-sm">
-                  {pending.map((t) => {
-                    const isExcluded = excluded.has(t.id);
-                    return (
-                      <li key={t.id} className="flex items-center gap-2 py-1.5 pr-1.5 pl-3">
-                        <span className={cn("min-w-0 flex-1 truncate", isExcluded && "text-muted-foreground line-through")}>
-                          {t.name}
-                        </span>
-                        <span
-                          className={cn(
-                            "tabular-nums",
-                            isExcluded ? "text-muted-foreground line-through" : t.type === "EXPENSE" ? "text-expense" : "text-income",
-                          )}
-                        >
-                          {t.type === "EXPENSE" ? "−" : "+"}
-                          {fmt(t.amount)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleExcluded(t.id)}
-                          aria-label={isExcluded ? `Volver a incluir ${t.name}` : `Quitar ${t.name}`}
-                          title={isExcluded ? "Volver a incluir" : "Quitar (ya pagado o no toca este mes)"}
-                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          {isExcluded ? <RotateCcwIcon className="size-3.5" /> : <XIcon className="size-4" />}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="flex items-baseline justify-between rounded-xl bg-muted/60 px-3 py-2">
-                  <span className="text-sm">Disponible hoy</span>
-                  <span className={cn("font-semibold tabular-nums", available < 0 && "text-expense")}>{fmt(available)}</span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 border-t pt-4">
-              <p className="text-sm font-medium">Cada mes</p>
-              <FixedComparison income={sum(fixedIncomes)} expense={sum(fixedExpenses)} currency={currency} />
-              <FixedSummary label="Ingresos fijos" items={fixedIncomes} fmt={fmt} />
-              <AmountField id="otherIncome" label="Otros ingresos (promedio)" value={otherIncome} onChange={setOtherIncome} invalid={invalid.has("otherIncome")} />
-              <FixedSummary label="Gastos fijos" items={fixedExpenses} fmt={fmt} />
-              <AmountField id="otherExpense" label="Otros gastos (promedio)" value={otherExpense} onChange={setOtherExpense} invalid={invalid.has("otherExpense")} />
-              <div className="flex items-baseline justify-between rounded-xl bg-muted/60 px-3 py-2 text-sm">
-                <span>Ahorro mensual</span>
-                <span className={cn("font-semibold tabular-nums", monthlySavings < 0 ? "text-expense" : "text-income")}>
-                  {monthlySavings < 0 ? "−" : "+"}
-                  {fmt(Math.abs(monthlySavings))}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                «Otros» es todo lo que no es fijo (comida, salidas…). Se calcula como tu promedio total
-                menos los fijos.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex flex-col gap-4">
-            <h2 className="font-medium">¿Qué quieres simular?</h2>
             <Segmented
               label="Tipo de simulación"
               value={kind}
@@ -308,25 +503,25 @@ export function Simulator({
               options={[
                 { value: "purchase", label: "Compra" },
                 { value: "income", label: "Ingreso" },
-                { value: "recurring", label: "Gasto fijo" },
+                { value: "recurring", label: "Gastos fijos" },
               ]}
             />
 
             {kind === "recurring" && (
               <div className="flex flex-col gap-2">
                 <Segmented
-                  label="Añadir o cancelar"
+                  label="Quitar o añadir gastos fijos"
                   value={recurringAction}
                   onChange={setRecurringAction}
                   options={[
+                    { value: "cancel", label: "Quitar gastos fijos" },
                     { value: "add", label: "Añadir uno nuevo" },
-                    { value: "cancel", label: "Cancelar uno" },
                   ]}
                 />
                 <p className="text-xs text-muted-foreground">
                   {recurringAction === "add"
-                    ? "Una suscripción, un gimnasio, un seguro… algo que pagarías cada mes."
-                    : "Elige uno de tus gastos fijos y mira cuánto ahorrarías sin él."}
+                    ? "Una suscripción, un gimnasio, un seguro… algo que empezarías a pagar cada mes."
+                    : "Marca los que dejarías de pagar (por ejemplo, darte de baja de una suscripción) y mira cuánto ahorrarías comparado con seguir pagándolos."}
                 </p>
               </div>
             )}
@@ -338,14 +533,20 @@ export function Simulator({
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="cancelId">Gasto fijo a cancelar</Label>
-                  <NativeSelect id="cancelId" value={cancelId} onChange={(e) => setCancelId(e.target.value)}>
-                    {fixedExpenses.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} · {fmt(t.amount)} al mes
-                      </option>
-                    ))}
-                  </NativeSelect>
+                  <p className="text-sm">
+                    {cancelTemplates.length === 0
+                      ? "↓ Marca en «Tus gastos e ingresos fijos» (más abajo) los que dejarías de pagar."
+                      : `Quitas: ${cancelNames}.`}
+                  </p>
+                  <div className="flex items-baseline justify-between rounded-xl bg-muted/60 px-3 py-2 text-sm">
+                    <span>
+                      Ahorrarías al mes
+                      {cancelTemplates.length > 0 && (
+                        <span className="text-muted-foreground"> ({cancelTemplates.length})</span>
+                      )}
+                    </span>
+                    <span className="font-semibold text-income tabular-nums">+{fmt(cancelTotal)}</span>
+                  </div>
                 </div>
               )
             ) : (
@@ -464,7 +665,7 @@ export function Simulator({
               <StartField
                 value={firstMonth}
                 onChange={setFirstMonth}
-                label={recurringAction === "add" ? "Empiezas a pagarlo" : "Lo cancelas"}
+                label={recurringAction === "add" ? "Empiezas a pagarlo" : "Dejas de pagarlos"}
               />
             )}
 
@@ -474,6 +675,8 @@ export function Simulator({
             </div>
           </CardContent>
         </Card>
+
+        {situationCard}
       </form>
 
       {/* ── Resultados ─────────────────────────────────────────────── */}
@@ -484,7 +687,7 @@ export function Simulator({
               {invalid.size > 0
                 ? "Revisa los montos marcados en rojo."
                 : kind === "recurring" && recurringAction === "cancel"
-                  ? "Elige el gasto fijo que quieres cancelar."
+                  ? "Marca los gastos fijos que dejarías de pagar para ver cuánto ahorrarías."
                   : `Escribe ${kind === "purchase" ? "el precio" : "el monto"} para ver el impacto.`}
             </CardContent>
           </Card>
@@ -492,6 +695,13 @@ export function Simulator({
           <>
             <Card>
               <CardContent className="flex flex-col gap-5">
+                {kind === "recurring" && (
+                  <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                    {recurringAction === "cancel"
+                      ? `Comparamos seguir pagando ${cancelNames} con dejar de pagar${cancelTemplates.length === 1 ? "lo" : "los"} desde ${firstMonth === "0" ? "este mes" : "el próximo mes"}.`
+                      : `Comparamos tu situación actual con añadir un gasto fijo de ${fmt(recurringMonthly)} al mes desde ${firstMonth === "0" ? "este mes" : "el próximo mes"}.`}
+                  </p>
+                )}
                 <div>
                   <p className="text-sm text-muted-foreground">En {horizonLabel} tendrías</p>
                   <p className="text-3xl font-semibold tracking-tight tabular-nums">{fmt(result.finalWithScenario)}</p>
@@ -622,41 +832,104 @@ export function Simulator({
   );
 }
 
-// Total de los fijos de un tipo, con el detalle desplegable.
-function FixedSummary({
-  label,
-  items,
+const PENDING_GROUPS = [
+  { type: "EXPENSE", label: "Gastos" },
+  { type: "INCOME", label: "Ingresos" },
+] as const;
+
+// Fila de la lista única de gastos/ingresos fijos del simulador:
+// - casilla (solo en "Quitar gastos fijos") para simular dejar de pagarlo;
+// - etiqueta "pendiente" si falta registrarlo este mes (se descuenta del disponible de hoy).
+function FixedRow({
+  template: t,
   fmt,
+  selectable,
+  cancelled,
+  onToggleCancel,
 }: {
-  label: string;
-  items: { id: string; name: string; amount: number }[];
+  template: {
+    name: string;
+    type: "INCOME" | "EXPENSE";
+    amount: number;
+    pending: boolean;
+    categoryName: string | null;
+    categoryColor: string | null;
+  };
   fmt: (cents: number) => string;
+  selectable: boolean;
+  cancelled: boolean;
+  onToggleCancel: () => void;
 }) {
-  if (items.length === 0) {
-    return (
-      <div className="flex items-baseline justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="text-muted-foreground tabular-nums">{fmt(0)}</span>
-      </div>
-    );
-  }
+  const content = (
+    <>
+      {selectable && (
+        <input
+          type="checkbox"
+          checked={cancelled}
+          onChange={onToggleCancel}
+          aria-label={`Dejar de pagar ${t.name}`}
+          className="size-4 shrink-0 accent-primary"
+        />
+      )}
+      <CategoryBadge name={t.categoryName} color={t.categoryColor} />
+      {/* Nombre arriba y etiquetas debajo, para que el nombre no se corte en el iPhone. */}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className={cn("truncate", cancelled && "line-through")}>{t.name}</span>
+        {(cancelled || t.pending) && (
+          <span className="flex flex-wrap gap-1">
+            {cancelled && <SimulatedTag>se quita</SimulatedTag>}
+            {t.pending && (
+              <span
+                className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                title="Falta registrarlo este mes: se descuenta (o se suma) del disponible de hoy"
+              >
+                pendiente
+              </span>
+            )}
+          </span>
+        )}
+      </span>
+      <span
+        className={cn(
+          "shrink-0 tabular-nums",
+          cancelled ? "text-muted-foreground line-through" : t.type === "EXPENSE" ? "text-expense" : "text-income",
+        )}
+      >
+        {t.type === "EXPENSE" ? "−" : "+"}
+        {fmt(t.amount)}
+      </span>
+    </>
+  );
+
   return (
-    <details className="group text-sm">
-      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-2">
-        <span>
-          {label} <span className="text-xs text-muted-foreground">({items.length}) · ver</span>
-        </span>
-        <span className="font-medium tabular-nums">{fmt(sum(items))}</span>
-      </summary>
-      <ul className="mt-2 flex flex-col gap-1 border-l-2 pl-3 text-xs text-muted-foreground">
-        {items.map((t) => (
-          <li key={t.id} className="flex justify-between gap-2">
-            <span className="truncate">{t.name}</span>
-            <span className="tabular-nums">{fmt(t.amount)}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
+    <li className="py-1.5 pr-3 pl-3">
+      {selectable ? (
+        // Toda la fila marca la casilla, para que sea fácil de tocar en el iPhone.
+        <label className="flex min-w-0 cursor-pointer items-center gap-2">{content}</label>
+      ) : (
+        <span className="flex min-w-0 items-center gap-2">{content}</span>
+      )}
+    </li>
+  );
+}
+
+function QuickAction({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-medium text-primary underline-offset-4 hover:underline"
+    >
+      {children}
+    </button>
+  );
+}
+
+function SimulatedTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="shrink-0 rounded bg-series-2/15 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+      {children}
+    </span>
   );
 }
 

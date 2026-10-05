@@ -15,6 +15,6 @@ export async function getFormOptions(workspaceId: string) {
   ]);
   return {
     accounts,
-    categories: categories.map(({ id, name, type }) => ({ id, name, type })),
+    categories: categories.map(({ id, name, type, color }) => ({ id, name, type, color })),
   };
 }

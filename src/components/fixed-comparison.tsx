@@ -7,10 +7,12 @@ export function FixedComparison({
   income,
   expense,
   currency,
+  simulated = false,
 }: {
   income: number;
   expense: number;
   currency: string;
+  simulated?: boolean; // los montos ya incluyen un cambio simulado (se indica en el título)
 }) {
   if (income === 0 && expense === 0) return null;
 
@@ -22,7 +24,10 @@ export function FixedComparison({
   return (
     <div className="flex flex-col gap-2 rounded-xl border p-3">
       <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="text-muted-foreground">Fijos: ingresos vs. gastos</span>
+        <span className="text-muted-foreground">
+          Fijos: ingresos vs. gastos
+          {simulated && <span className="text-foreground"> · con la simulación</span>}
+        </span>
         <span className="font-medium tabular-nums">
           {share === null ? "—" : `${Math.round(share * 100)} %`}
         </span>

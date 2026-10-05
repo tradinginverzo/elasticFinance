@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAccountsWithBalance } from "@/lib/accounts";
+import { getCategories } from "@/lib/categories";
 import { requireWorkspace } from "@/lib/context";
 import { currentMonth, formatMonth, monthRange } from "@/lib/dates";
 import { db } from "@/lib/db";
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
   const month = currentMonth();
   const { start, end } = monthRange(month);
 
+  await getCategories(workspace.id); // asegura los colores de las insignias de categoría
   const [accounts, totals, recent] = await Promise.all([
     getAccountsWithBalance(workspace.id),
     db.transaction.groupBy({

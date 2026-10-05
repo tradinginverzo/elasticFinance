@@ -19,6 +19,7 @@ export async function getBaseline(workspaceId: string) {
   const from = monthRange(shiftMonth(month, -MONTHS_FOR_AVERAGE)).start;
   const to = monthRange(month).start;
 
+  // getTemplatesWithStatus ya asegura que las categorías tengan color.
   const [accounts, templates, pastTransactions] = await Promise.all([
     getAccountsWithBalance(workspaceId),
     getTemplatesWithStatus(workspaceId),
@@ -56,6 +57,8 @@ export async function getBaseline(workspaceId: string) {
       name: t.name,
       type: t.type,
       amount: Number(t.amountCents),
+      categoryName: t.category?.name ?? null,
+      categoryColor: t.category?.color ?? null,
       pending: t.thisMonth.length === 0,
     })),
     otherIncome: Math.max(averageOf("INCOME") - fixedOf("INCOME"), 0),

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
+import { CategorySelect } from "@/components/category-select";
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
 import { Segmented } from "@/components/segmented";
@@ -33,7 +34,7 @@ export function TemplateForm({
     merchant: string | null;
   };
   accounts: { id: string; name: string }[];
-  categories: { id: string; name: string; type: TransactionType }[];
+  categories: { id: string; name: string; type: TransactionType; color: string | null }[];
   currency: string;
 }) {
   const { state, onSubmit, pending } = useFormAction(
@@ -115,21 +116,13 @@ export function TemplateForm({
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="categoryId">Categoría</Label>
-            <NativeSelect
+            <CategorySelect
               key={type}
               id="categoryId"
               name="categoryId"
-              defaultValue={template?.type === type ? (template.categoryId ?? "") : ""}
-            >
-              <option value="">Sin categoría</option>
-              {categories
-                .filter((c) => c.type === type)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </NativeSelect>
+              categories={categories.filter((c) => c.type === type)}
+              defaultValue={template?.type === type ? template.categoryId : null}
+            />
           </div>
         </div>
 

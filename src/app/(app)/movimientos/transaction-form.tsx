@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 
+import { CategorySelect } from "@/components/category-select";
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ export type TemplateOption = {
   categoryId: string | null;
   merchant: string | null;
   categoryName: string | null;
+  categoryColor: string | null;
   accountName: string | null;
   registeredOn: string | null; // "2026-10-03" si ya se registró este mes
 };
@@ -64,7 +66,7 @@ export function TransactionForm({
 }: {
   transaction?: TransactionFormData;
   accounts: { id: string; name: string }[];
-  categories: { id: string; name: string; type: TransactionType }[];
+  categories: { id: string; name: string; type: TransactionType; color: string | null }[];
   currency: string;
   templates?: TemplateOption[];
   initialTemplateId?: string | null;
@@ -237,20 +239,14 @@ export function TransactionForm({
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="categoryId">Categoría</Label>
-          <NativeSelect
+          <CategorySelect
             // Al cambiar entre gasto e ingreso (o de gasto fijo) cambian las opciones: remontamos el select.
             key={`category-${type}-${templateId}`}
             id="categoryId"
             name="categoryId"
-            defaultValue={prefill.type === type ? (prefill.categoryId ?? "") : ""}
-          >
-            <option value="">Sin categoría</option>
-            {visibleCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </NativeSelect>
+            categories={visibleCategories}
+            defaultValue={prefill.type === type ? prefill.categoryId : null}
+          />
         </div>
 
         <div className="flex flex-col gap-2">

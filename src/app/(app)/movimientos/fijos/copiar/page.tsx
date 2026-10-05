@@ -16,7 +16,13 @@ export default async function CopyTemplatesPage() {
     db.transactionTemplate.findMany({
       where: { workspaceId: workspace.id },
       orderBy: [{ type: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, type: true, amountCents: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        amountCents: true,
+        category: { select: { name: true, color: true } },
+      },
     }),
     listWorkspaces(profile.id),
   ]);
@@ -49,7 +55,12 @@ export default async function CopyTemplatesPage() {
           sourceName={workspace.name}
           currency={workspace.currency}
           targets={targets.map(({ id, name }) => ({ id, name }))}
-          templates={templates.map((t) => ({ ...t, amountCents: t.amountCents.toString() }))}
+          templates={templates.map(({ category, ...t }) => ({
+            ...t,
+            amountCents: t.amountCents.toString(),
+            categoryName: category?.name ?? null,
+            categoryColor: category?.color ?? null,
+          }))}
         />
       )}
     </div>

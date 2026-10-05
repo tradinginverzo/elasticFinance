@@ -4,6 +4,7 @@ import { CheckIcon, ChevronRightIcon, PinIcon, SearchIcon, XIcon } from "lucide-
 import Link from "next/link";
 import { useState } from "react";
 
+import { CategoryBadge } from "@/components/category-badge";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -58,7 +59,7 @@ export function TemplatePicker({
     <>
       {selected ? (
         <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 py-2 pr-2 pl-3">
-          <PinIcon className="size-4 shrink-0 text-primary" />
+          <CategoryBadge name={selected.categoryName} color={selected.categoryColor} className="size-7 text-xs" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{selected.name}</p>
             <p className="truncate text-xs text-muted-foreground">
@@ -184,6 +185,7 @@ function TemplateSection({
                   t.id === selectedId && "bg-primary/5",
                 )}
               >
+                <CategoryBadge name={t.categoryName} color={t.categoryColor} className="size-7 text-xs" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{t.name}</p>
                   <p className="truncate text-xs text-muted-foreground">

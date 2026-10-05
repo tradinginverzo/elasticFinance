@@ -1,6 +1,7 @@
 import { CheckCircle2Icon, ChevronLeftIcon, CopyIcon, PinIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 
+import { CategoryBadge } from "@/components/category-badge";
 import { FixedComparison } from "@/components/fixed-comparison";
 import { UsualDiffBadge } from "@/components/usual-diff-badge";
 import { Button } from "@/components/ui/button";
@@ -154,6 +155,11 @@ function TemplateGroup({
           const registered = t.thisMonth[0];
           return (
             <li key={t.id} className="flex items-center gap-3 px-4 py-3">
+              <CategoryBadge
+                name={t.category?.name ?? null}
+                color={t.category?.color ?? null}
+                className="size-8 text-xs"
+              />
               <Link href={`/movimientos/fijos/${t.id}`} className="min-w-0 flex-1">
                 <p className="truncate font-medium">{t.name}</p>
                 <p className="truncate text-xs text-muted-foreground">

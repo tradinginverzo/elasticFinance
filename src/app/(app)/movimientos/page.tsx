@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getCategories } from "@/lib/categories";
 import { requireWorkspace } from "@/lib/context";
 import { currentMonth, formatMonth, monthRange, shiftMonth } from "@/lib/dates";
 import { db } from "@/lib/db";
@@ -24,6 +25,7 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
   const month = typeof mes === "string" && /^\d{4}-\d{2}$/.test(mes) ? mes : currentMonth();
   const { start, end } = monthRange(month);
 
+  await getCategories(workspace.id); // asegura los colores de las insignias de categoría
   const transactions = await db.transaction.findMany({
     where: { workspaceId: workspace.id, date: { gte: start, lt: end } },
     include: transactionListInclude,

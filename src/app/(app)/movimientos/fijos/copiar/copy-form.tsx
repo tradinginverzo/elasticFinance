@@ -4,6 +4,7 @@ import { CheckCircle2Icon } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 
+import { CategoryBadge } from "@/components/category-badge";
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,14 @@ import { cn } from "@/lib/utils";
 import { activateWorkspace } from "../../../espacios/actions";
 import { copyTemplates, type CopyTemplatesState } from "../actions";
 
-type Item = { id: string; name: string; type: "EXPENSE" | "INCOME"; amountCents: string };
+type Item = {
+  id: string;
+  name: string;
+  type: "EXPENSE" | "INCOME";
+  amountCents: string;
+  categoryName: string | null;
+  categoryColor: string | null;
+};
 
 const initialState: CopyTemplatesState = { error: null };
 
@@ -114,6 +122,7 @@ export function CopyTemplatesForm({
                   onChange={() => toggle(t.id)}
                   className="size-4 accent-primary"
                 />
+                <CategoryBadge name={t.categoryName} color={t.categoryColor} />
                 <span className="min-w-0 flex-1 truncate text-sm">{t.name}</span>
                 <span
                   className={cn(

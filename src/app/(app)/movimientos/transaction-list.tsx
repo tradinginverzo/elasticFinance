@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CategoryBadge } from "@/components/category-badge";
 import { UsualDiffBadge } from "@/components/usual-diff-badge";
 import { formatDate } from "@/lib/dates";
 import { formatCents } from "@/lib/money";
@@ -14,7 +15,7 @@ export type TransactionListItem = {
   date: Date;
   merchant: string | null;
   templateAmountCents: bigint | null;
-  category: { name: string } | null;
+  category: { name: string; color: string | null } | null;
   account: { name: string };
   createdBy: { firstName: string | null; lastName: string | null; email: string };
 };
@@ -47,6 +48,11 @@ export function TransactionList({
                   href={`/movimientos/${t.id}`}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
                 >
+                  <CategoryBadge
+                    name={t.category?.name ?? null}
+                    color={t.category?.color ?? null}
+                    className="size-8 text-xs"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {t.merchant || t.category?.name || (t.type === "EXPENSE" ? "Gasto" : "Ingreso")}
@@ -90,7 +96,7 @@ export function TransactionList({
 }
 
 export const transactionListInclude = {
-  category: { select: { name: true } },
+  category: { select: { name: true, color: true } },
   account: { select: { name: true } },
   createdBy: { select: profileNameSelect },
 } as const;

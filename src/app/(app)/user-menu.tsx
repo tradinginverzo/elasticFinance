@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRoundIcon, LogOutIcon, UserRoundIcon } from "lucide-react";
+import { KeyRoundIcon, LogOutIcon, TagIcon, UserRoundIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -48,6 +48,10 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
         <DropdownMenuItem onClick={() => router.push("/perfil")}>
           <UserRoundIcon />
           Mi perfil
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/categorias")}>
+          <TagIcon />
+          Categorías
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => router.push("/reset-password")}>
           <KeyRoundIcon />
