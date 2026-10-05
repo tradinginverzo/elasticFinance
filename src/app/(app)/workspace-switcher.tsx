@@ -1,15 +1,18 @@
 "use client";
 
-import { ChevronsUpDownIcon, HomeIcon, LockIcon } from "lucide-react";
+import { ChevronsUpDownIcon, HomeIcon, LockIcon, PlusIcon, SettingsIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -30,6 +33,7 @@ export function WorkspaceSwitcher({
   activeId: string;
 }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0];
 
   return (
@@ -59,6 +63,15 @@ export function WorkspaceSwitcher({
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/espacios/nuevo")}>
+          <PlusIcon />
+          Nuevo espacio compartido
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/espacios")}>
+          <SettingsIcon />
+          Administrar espacios
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

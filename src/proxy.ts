@@ -27,8 +27,9 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // No pongas código entre createServerClient y getUser(): es lo que refresca el token.
-  await supabase.auth.getUser();
+  // No pongas código entre createServerClient y getClaims(): es lo que refresca el token
+  // cuando caduca. Verifica la firma localmente, sin consultar a Supabase en cada petición.
+  await supabase.auth.getClaims();
 
   return response;
 }

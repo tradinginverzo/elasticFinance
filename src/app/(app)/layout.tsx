@@ -3,8 +3,10 @@ import Link from "next/link";
 import { EnvBadge } from "@/components/env-badge";
 import { Logo } from "@/components/logo";
 import { requireProfile } from "@/lib/auth";
+import { fullName } from "@/lib/profile-name";
 import { getActiveWorkspace, listWorkspaces } from "@/lib/workspaces";
 
+import { DesktopNav, MobileNav } from "./app-nav";
 import { UserMenu } from "./user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -27,15 +29,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             workspaces={workspaces.map(({ id, name, kind }) => ({ id, name, kind }))}
             activeId={active.id}
           />
+          <DesktopNav />
           <div className="ml-auto">
             <UserMenu
-              name={profile.displayName ?? profile.email.split("@")[0]}
+              name={fullName(profile)}
               email={profile.email}
             />
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
+      {/* En móvil dejamos espacio abajo para la barra de navegación fija. */}
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-28 md:pb-6">{children}</main>
+      <MobileNav />
     </div>
   );
 }

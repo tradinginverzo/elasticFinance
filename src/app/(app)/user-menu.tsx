@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOutIcon } from "lucide-react";
+import { KeyRoundIcon, LogOutIcon, TagIcon, UserRoundIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,6 +19,7 @@ import { signOut } from "./actions";
 
 export function UserMenu({ name, email }: { name: string; email: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const initials = name
     .split(/\s+/)
     .map((part) => part[0])
@@ -43,6 +45,18 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/perfil")}>
+          <UserRoundIcon />
+          Mi perfil
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/categorias")}>
+          <TagIcon />
+          Categorías
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/reset-password")}>
+          <KeyRoundIcon />
+          Cambiar contraseña
+        </DropdownMenuItem>
         <DropdownMenuItem
           disabled={pending}
           onClick={() => startTransition(() => signOut())}
