@@ -1,0 +1,182 @@
+{
+  "exportedAt": "2026-10-04T21:52:01.574Z",
+  "email": "dayarisiphone@gmail.com",
+  "templates": [
+    {
+      "name": "Agua",
+      "type": "EXPENSE",
+      "amountCents": "2500",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Alquiler",
+      "type": "EXPENSE",
+      "amountCents": "20000",
+      "merchant": "Cuenca",
+      "categoryName": "Hogar",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Bus al wayra",
+      "type": "EXPENSE",
+      "amountCents": "4400",
+      "merchant": "Pasaje en bus al gym ida y vuelta (3 personas, por 20 dias)",
+      "categoryName": "Transporte",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Claude",
+      "type": "EXPENSE",
+      "amountCents": "10000",
+      "merchant": "Suscripcion IA",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Crédito GYE Juli",
+      "type": "EXPENSE",
+      "amountCents": "5400",
+      "merchant": "Cuota Credito GYE",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Cuenta segura GYE",
+      "type": "EXPENSE",
+      "amountCents": "300",
+      "merchant": "Servicio GYE",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Gas",
+      "type": "EXPENSE",
+      "amountCents": "700",
+      "merchant": "Gas domestico (3 tanques)",
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Graciela",
+      "type": "EXPENSE",
+      "amountCents": "15000",
+      "merchant": "Mamá de Dayi",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Gym",
+      "type": "EXPENSE",
+      "amountCents": "10000",
+      "merchant": "Membresia Smart fit",
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Interés AMEX",
+      "type": "EXPENSE",
+      "amountCents": "10000",
+      "merchant": "Interes AMEX Dayi",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Internet",
+      "type": "EXPENSE",
+      "amountCents": "3000",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Luz",
+      "type": "EXPENSE",
+      "amountCents": "3500",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Movistar",
+      "type": "EXPENSE",
+      "amountCents": "2500",
+      "merchant": "Plan Movistar Dayi",
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Pedidos Ya",
+      "type": "EXPENSE",
+      "amountCents": "600",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Piscina",
+      "type": "EXPENSE",
+      "amountCents": "1000",
+      "merchant": "Uso de Piscina (3 personas, por 1 dia)",
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Spotify",
+      "type": "EXPENSE",
+      "amountCents": "700",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Sukasa (Cuota)",
+      "type": "EXPENSE",
+      "amountCents": "16000",
+      "merchant": "Compras a Créditos",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Taxi al wayra",
+      "type": "EXPENSE",
+      "amountCents": "20000",
+      "merchant": "Taxi al wayra plaza ida y vuelta (20 dias)",
+      "categoryName": "Transporte",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "TDC Juli",
+      "type": "EXPENSE",
+      "amountCents": "1500",
+      "merchant": "Cuota AMEX",
+      "categoryName": "Otros gastos",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Trading View",
+      "type": "EXPENSE",
+      "amountCents": "2200",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Uber One",
+      "type": "EXPENSE",
+      "amountCents": "500",
+      "merchant": null,
+      "categoryName": "Servicios",
+      "accountName": "Chibuleo"
+    },
+    {
+      "name": "Sueldo",
+      "type": "INCOME",
+      "amountCents": "146000",
+      "merchant": "Singular",
+      "categoryName": "Sueldo",
+      "accountName": "Chibuleo"
+    }
+  ]
+}
