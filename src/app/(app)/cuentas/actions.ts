@@ -62,15 +62,17 @@ export async function deleteAccount(accountId: string): Promise<AccountFormState
   const { profile } = await requireWorkspace();
   const account = await db.account.findUnique({
     where: { id: accountId },
-    include: { _count: { select: { transactions: true } } },
+    include: { _count: { select: { transactions: true, incomingTransfers: true } } },
   });
   if (!account || !(await isMemberOf(profile.id, account.workspaceId))) {
     return { error: "Esa cuenta no existe." };
   }
-  // Borrar la cuenta borraría sus movimientos: solo lo permitimos si está vacía.
-  if (account._count.transactions > 0) {
+  // Borrar la cuenta borraría sus movimientos (también las transferencias que recibió):
+  // solo lo permitimos si está vacía.
+  const count = account._count.transactions + account._count.incomingTransfers;
+  if (count > 0) {
     return {
-      error: `La cuenta tiene ${account._count.transactions} movimientos. Bórralos o muévelos antes de eliminarla.`,
+      error: `La cuenta tiene ${count} movimientos. Bórralos o muévelos antes de eliminarla.`,
     };
   }
 

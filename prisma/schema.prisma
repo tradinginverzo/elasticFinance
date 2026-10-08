@@ -38,6 +38,7 @@ enum AccountType {
 enum TransactionType {
   EXPENSE
   INCOME
+  TRANSFER // dinero que pasa de una cuenta a otra (no es ingreso ni gasto)
 }
 
 enum ReceiptStatus {
@@ -109,13 +110,15 @@ model Account {
   name                String
   type                AccountType
   currency            String      @db.Char(3)
-  // Saldo que tenía la cuenta al empezar a usar la app. Saldo actual = inicial + ingresos − gastos.
+  // Saldo que tenía la cuenta al empezar a usar la app.
+  // Saldo actual = inicial + ingresos − gastos − transferencias enviadas + transferencias recibidas.
   initialBalanceCents BigInt      @default(0) @map("initial_balance_cents")
   createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  templates    TransactionTemplate[]
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions      Transaction[]         @relation("TransactionAccount")
+  incomingTransfers Transaction[]         @relation("TransferToAccount")
+  templates         TransactionTemplate[]
 
   @@index([workspaceId])
   @@map("accounts")
@@ -141,7 +144,8 @@ model Transaction {
   id                  String          @id @default(uuid()) @db.Uuid
   workspaceId         String          @map("workspace_id") @db.Uuid
   createdById         String          @map("created_by_id") @db.Uuid
-  accountId           String          @map("account_id") @db.Uuid
+  accountId           String          @map("account_id") @db.Uuid // en transferencias: cuenta de origen
+  toAccountId         String?         @map("to_account_id") @db.Uuid // solo transferencias: cuenta de destino
   categoryId          String?         @map("category_id") @db.Uuid
   type                TransactionType
   amountCents         BigInt          @map("amount_cents") // siempre positivo; el signo lo da `type`
@@ -159,12 +163,14 @@ model Transaction {
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy Profile              @relation(fields: [createdById], references: [id])
   template  TransactionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  account   Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account              @relation("TransactionAccount", fields: [accountId], references: [id], onDelete: Cascade)
+  toAccount Account?             @relation("TransferToAccount", fields: [toAccountId], references: [id], onDelete: Cascade)
   category  Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   receipts  Receipt[]
 
   @@index([workspaceId, date(sort: Desc)])
   @@index([templateId, date])
+  @@index([toAccountId])
   @@map("transactions")
 }
 

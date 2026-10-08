@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCategories } from "@/lib/categories";
 import { db } from "@/lib/db";
+import { onlyFlow } from "@/lib/transaction-types";
 
 // Cuentas y categorías del espacio para los <select> de los formularios.
 export async function getFormOptions(workspaceId: string) {
@@ -15,6 +16,6 @@ export async function getFormOptions(workspaceId: string) {
   ]);
   return {
     accounts,
-    categories: categories.map(({ id, name, type, color }) => ({ id, name, type, color })),
+    categories: onlyFlow(categories).map(({ id, name, type, color }) => ({ id, name, type, color })),
   };
 }

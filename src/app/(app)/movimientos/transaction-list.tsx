@@ -1,3 +1,4 @@
+import { ArrowLeftRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { CategoryBadge } from "@/components/category-badge";
@@ -9,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export type TransactionListItem = {
   id: string;
-  type: "EXPENSE" | "INCOME";
+  type: "EXPENSE" | "INCOME" | "TRANSFER";
   amountCents: bigint;
   currency: string;
   date: Date;
@@ -17,6 +18,7 @@ export type TransactionListItem = {
   templateAmountCents: bigint | null;
   category: { name: string; color: string | null } | null;
   account: { name: string };
+  toAccount: { name: string } | null; // solo transferencias
   createdBy: { firstName: string | null; lastName: string | null; email: string };
 };
 
@@ -48,43 +50,11 @@ export function TransactionList({
                   href={`/movimientos/${t.id}`}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
                 >
-                  <CategoryBadge
-                    name={t.category?.name ?? null}
-                    color={t.category?.color ?? null}
-                    className="size-8 text-xs"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {t.merchant || t.category?.name || (t.type === "EXPENSE" ? "Gasto" : "Ingreso")}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {[
-                        t.merchant ? t.category?.name : null,
-                        t.account.name,
-                        showAuthor ? shortName(t.createdBy) : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span
-                      className={cn(
-                        "font-semibold whitespace-nowrap tabular-nums",
-                        t.type === "EXPENSE" ? "text-expense" : "text-income",
-                      )}
-                    >
-                      {t.type === "EXPENSE" ? "−" : "+"}
-                      {formatCents(t.amountCents, t.currency)}
-                    </span>
-                    {/* Gasto/ingreso fijo con un monto distinto del habitual. */}
-                    <UsualDiffBadge
-                      type={t.type}
-                      amountCents={Number(t.amountCents)}
-                      usualCents={t.templateAmountCents === null ? null : Number(t.templateAmountCents)}
-                      currency={t.currency}
-                    />
-                  </div>
+                  {t.type === "TRANSFER" ? (
+                    <TransferRow t={t} showAuthor={showAuthor} />
+                  ) : (
+                    <FlowRow t={t} showAuthor={showAuthor} />
+                  )}
                 </Link>
               </li>
             ))}
@@ -95,8 +65,70 @@ export function TransactionList({
   );
 }
 
+// Gasto o ingreso: insignia de categoría, monto con signo y color.
+function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolean }) {
+  const type = t.type === "INCOME" ? "INCOME" : "EXPENSE";
+  return (
+    <>
+      <CategoryBadge name={t.category?.name ?? null} color={t.category?.color ?? null} className="size-8 text-xs" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">
+          {t.merchant || t.category?.name || (type === "EXPENSE" ? "Gasto" : "Ingreso")}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {[t.merchant ? t.category?.name : null, t.account.name, showAuthor ? shortName(t.createdBy) : null]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      </div>
+      <div className="flex flex-col items-end gap-0.5">
+        <span
+          className={cn(
+            "font-semibold whitespace-nowrap tabular-nums",
+            type === "EXPENSE" ? "text-expense" : "text-income",
+          )}
+        >
+          {type === "EXPENSE" ? "−" : "+"}
+          {formatCents(t.amountCents, t.currency)}
+        </span>
+        {/* Gasto/ingreso fijo con un monto distinto del habitual. */}
+        <UsualDiffBadge
+          type={type}
+          amountCents={Number(t.amountCents)}
+          usualCents={t.templateAmountCents === null ? null : Number(t.templateAmountCents)}
+          currency={t.currency}
+        />
+      </div>
+    </>
+  );
+}
+
+// Transferencia: "Chibuleo → Efectivo", monto neutro (no es ingreso ni gasto).
+function TransferRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolean }) {
+  return (
+    <>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <ArrowLeftRightIcon className="size-4" />
+        <span className="sr-only">Transferencia</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">
+          {t.account.name} → {t.toAccount?.name ?? "—"}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {["Transferencia", t.merchant, showAuthor ? shortName(t.createdBy) : null].filter(Boolean).join(" · ")}
+        </p>
+      </div>
+      <span className="font-semibold whitespace-nowrap text-muted-foreground tabular-nums">
+        {formatCents(t.amountCents, t.currency)}
+      </span>
+    </>
+  );
+}
+
 export const transactionListInclude = {
   category: { select: { name: true, color: true } },
   account: { select: { name: true } },
+  toAccount: { select: { name: true } },
   createdBy: { select: profileNameSelect },
 } as const;

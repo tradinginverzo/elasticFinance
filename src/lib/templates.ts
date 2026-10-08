@@ -3,6 +3,7 @@ import "server-only";
 import { getCategories } from "@/lib/categories";
 import { currentMonth, monthRange } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { onlyFlow } from "@/lib/transaction-types";
 
 // Gastos/ingresos fijos del espacio, con lo registrado este mes para cada uno.
 export async function getTemplatesWithStatus(workspaceId: string) {
@@ -23,7 +24,8 @@ export async function getTemplatesWithStatus(workspaceId: string) {
     orderBy: [{ type: "asc" }, { name: "asc" }],
   });
 
-  return templates.map(({ transactions, ...template }) => ({
+  // Los gastos fijos solo son ingresos o gastos (nunca transferencias).
+  return onlyFlow(templates).map(({ transactions, ...template }) => ({
     ...template,
     thisMonth: transactions,
   }));

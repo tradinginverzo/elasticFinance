@@ -11,11 +11,14 @@ import { parseAmountToCents } from "@/lib/money";
 export type TransactionFormState = { error: string | null };
 
 const transactionSchema = z.object({
-  type: z.enum(["EXPENSE", "INCOME"]),
+  type: z.enum(["EXPENSE", "INCOME", "TRANSFER"]),
   amount: z.string().trim().min(1, "Escribe el monto."),
   date: z.string(),
   accountId: z.uuid("Elige una cuenta."),
-  categoryId: z.union([z.uuid(), z.literal("")]),
+  // Solo transferencias: la cuenta a la que llega el dinero.
+  toAccountId: z.union([z.uuid(), z.literal("")]).default(""),
+  // Las transferencias no envían categoría (el campo no se muestra).
+  categoryId: z.union([z.uuid(), z.literal("")]).default(""),
   merchant: z.string().trim().max(100),
   notes: z.string().trim().max(500),
   templateId: z.union([z.uuid(), z.literal("")]).default(""),
@@ -51,21 +54,29 @@ export async function saveTransaction(
     workspaceId = existing.workspaceId;
   }
 
-  // La cuenta, la categoría y el gasto fijo tienen que ser del mismo espacio
-  // (y la categoría, del mismo tipo).
-  const [account, category, template] = await Promise.all([
+  const isTransfer = input.type === "TRANSFER";
+  if (isTransfer && !input.toAccountId) return { error: "Elige a qué cuenta pasa el dinero." };
+  if (isTransfer && input.toAccountId === input.accountId) {
+    return { error: "La cuenta de origen y la de destino deben ser distintas." };
+  }
+
+  // Las cuentas, la categoría y el gasto fijo tienen que ser del mismo espacio
+  // (y la categoría, del mismo tipo). Las transferencias no llevan categoría ni gasto fijo.
+  const [account, toAccount, category, template] = await Promise.all([
     db.account.findFirst({ where: { id: input.accountId, workspaceId } }),
-    input.categoryId
+    isTransfer ? db.account.findFirst({ where: { id: input.toAccountId, workspaceId } }) : null,
+    !isTransfer && input.categoryId
       ? db.category.findFirst({
           where: { id: input.categoryId, workspaceId, type: input.type },
         })
       : null,
-    input.templateId
+    !isTransfer && input.templateId
       ? db.transactionTemplate.findFirst({ where: { id: input.templateId, workspaceId } })
       : null,
   ]);
   if (!account) return { error: "Elige una cuenta válida." };
-  if (input.categoryId && !category) return { error: "Elige una categoría válida." };
+  if (isTransfer && !toAccount) return { error: "Elige una cuenta de destino válida." };
+  if (!isTransfer && input.categoryId && !category) return { error: "Elige una categoría válida." };
 
   const data = {
     type: input.type,
@@ -73,6 +84,7 @@ export async function saveTransaction(
     currency: account.currency,
     date,
     accountId: account.id,
+    toAccountId: toAccount?.id ?? null,
     categoryId: category?.id ?? null,
     merchant: input.merchant || null,
     notes: input.notes || null,

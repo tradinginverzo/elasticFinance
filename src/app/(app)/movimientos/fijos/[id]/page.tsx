@@ -4,6 +4,7 @@ import { requireWorkspace } from "@/lib/context";
 import { db } from "@/lib/db";
 import { getFormOptions } from "@/lib/form-options";
 import { centsToInput } from "@/lib/money";
+import { isFlowType } from "@/lib/transaction-types";
 
 import { TemplateForm } from "../template-form";
 
@@ -18,7 +19,7 @@ export default async function EditTemplatePage({
   const template = await db.transactionTemplate.findFirst({
     where: { id, workspaceId: workspace.id },
   });
-  if (!template) notFound();
+  if (!template || !isFlowType(template.type)) notFound();
   const { accounts, categories } = await getFormOptions(workspace.id);
 
   return (
