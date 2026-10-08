@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/context";
 import { db } from "@/lib/db";
+import { onlyFlow } from "@/lib/transaction-types";
 import { listWorkspaces } from "@/lib/workspaces";
 
 import { CopyTemplatesForm } from "./copy-form";
@@ -55,7 +56,7 @@ export default async function CopyTemplatesPage() {
           sourceName={workspace.name}
           currency={workspace.currency}
           targets={targets.map(({ id, name }) => ({ id, name }))}
-          templates={templates.map(({ category, ...t }) => ({
+          templates={onlyFlow(templates).map(({ category, ...t }) => ({
             ...t,
             amountCents: t.amountCents.toString(),
             categoryName: category?.name ?? null,

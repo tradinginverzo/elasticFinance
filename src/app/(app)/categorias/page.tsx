@@ -1,5 +1,6 @@
 import { getCategories } from "@/lib/categories";
 import { requireWorkspace } from "@/lib/context";
+import { onlyFlow } from "@/lib/transaction-types";
 
 import { CategoryList } from "./category-list";
 
@@ -18,7 +19,7 @@ export default async function CategoriesPage() {
         </p>
       </div>
       <CategoryList
-        categories={categories.map(({ id, name, type, color }) => ({ id, name, type, color }))}
+        categories={onlyFlow(categories).map(({ id, name, type, color }) => ({ id, name, type, color }))}
       />
     </div>
   );

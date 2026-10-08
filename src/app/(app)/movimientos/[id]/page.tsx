@@ -52,6 +52,7 @@ export default async function EditTransactionPage({
           amount: centsToInput(transaction.amountCents),
           date: toDateInput(transaction.date),
           accountId: transaction.accountId,
+          toAccountId: transaction.toAccountId,
           categoryId: transaction.categoryId,
           merchant: transaction.merchant,
           notes: transaction.notes,

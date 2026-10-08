@@ -23,7 +23,15 @@ import {
   type TransactionFormState,
 } from "./actions";
 
-type TransactionType = "EXPENSE" | "INCOME";
+// Gasto / ingreso, o transferencia entre cuentas (no es ni ingreso ni gasto).
+type TransactionType = "EXPENSE" | "INCOME" | "TRANSFER";
+type FlowType = Exclude<TransactionType, "TRANSFER">;
+
+const TYPE_OPTIONS = [
+  ["EXPENSE", "Gasto", "text-expense"],
+  ["INCOME", "Ingreso", "text-income"],
+  ["TRANSFER", "Transferencia", "text-foreground"],
+] as const;
 
 export type TransactionFormData = {
   id: string;
@@ -31,6 +39,7 @@ export type TransactionFormData = {
   amount: string;
   date: string;
   accountId: string;
+  toAccountId: string | null; // solo transferencias
   categoryId: string | null;
   merchant: string | null;
   notes: string | null;
@@ -43,7 +52,7 @@ export type TransactionFormData = {
 export type TemplateOption = {
   id: string;
   name: string;
-  type: TransactionType;
+  type: FlowType;
   amountCents: string;
   accountId: string | null;
   categoryId: string | null;
@@ -66,7 +75,7 @@ export function TransactionForm({
 }: {
   transaction?: TransactionFormData;
   accounts: { id: string; name: string }[];
-  categories: { id: string; name: string; type: TransactionType; color: string | null }[];
+  categories: { id: string; name: string; type: FlowType; color: string | null }[];
   currency: string;
   templates?: TemplateOption[];
   initialTemplateId?: string | null;
@@ -109,12 +118,32 @@ export function TransactionForm({
       : null;
   const typedCents = parseAmountToCents(amountText);
 
+  // Cuentas: "Desde" (o la cuenta del gasto/ingreso) y, en transferencias, "Hacia" (distinta).
+  const [fromAccountId, setFromAccountId] = useState(prefill.accountId ?? "");
+  const firstOtherAccount = (fromId: string) => accounts.find((a) => a.id !== fromId)?.id ?? "";
+  const [toAccountId, setToAccountId] = useState(
+    transaction?.toAccountId ?? firstOtherAccount(prefill.accountId ?? ""),
+  );
+  const isTransfer = type === "TRANSFER";
+
+  function changeFromAccount(id: string) {
+    setFromAccountId(id);
+    if (id === toAccountId) setToAccountId(firstOtherAccount(id));
+  }
+
   // id = "" deja de usar el gasto fijo (los campos vuelven a quedar vacíos).
   function applyTemplate(id: string) {
     setTemplateId(id);
     const next = templates.find((t) => t.id === id);
     if (next) setType(next.type);
     setAmountText(next ? centsToInput(BigInt(next.amountCents)) : "");
+    if (next?.accountId) changeFromAccount(next.accountId);
+  }
+
+  function changeType(next: TransactionType) {
+    setType(next);
+    // Una transferencia no sale de un gasto fijo.
+    if (next === "TRANSFER" && templateId) applyTemplate("");
   }
   const [deleting, startDelete] = useTransition();
   const dateRef = useRef<HTMLInputElement>(null);
@@ -125,6 +154,7 @@ export function TransactionForm({
   }, [transaction]);
 
   const visibleCategories = categories.filter((c) => c.type === type);
+  const toAccounts = accounts.filter((a) => a.id !== fromAccountId);
 
   function handleDelete() {
     if (!transaction || !confirm("¿Eliminar este movimiento?")) return;
@@ -141,6 +171,7 @@ export function TransactionForm({
         <input type="hidden" name="templateId" value={templateId} />
 
         {!transaction &&
+          !isTransfer &&
           (templates.length > 0 ? (
             <TemplatePicker
               templates={templates}
@@ -157,29 +188,30 @@ export function TransactionForm({
             </Link>
           ))}
 
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="Tipo">
-          {(
-            [
-              ["EXPENSE", "Gasto"],
-              ["INCOME", "Ingreso"],
-            ] as const
-          ).map(([value, label]) => (
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="Tipo">
+          {TYPE_OPTIONS.map(([value, label, activeColor]) => (
             <button
               key={value}
               type="button"
               role="radio"
               aria-checked={type === value}
-              onClick={() => setType(value)}
+              onClick={() => changeType(value)}
               className={cn(
-                "h-9 rounded-lg text-sm font-medium text-muted-foreground transition-colors",
-                type === value && "bg-background text-foreground shadow-sm",
-                type === value && (value === "EXPENSE" ? "text-expense" : "text-income"),
+                "h-9 truncate rounded-lg px-1 text-sm font-medium text-muted-foreground transition-colors",
+                type === value && "bg-background shadow-sm",
+                type === value && activeColor,
               )}
             >
               {label}
             </button>
           ))}
         </div>
+        {isTransfer && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Pasa dinero de una cuenta a otra (retiro en efectivo, pago de la tarjeta…). No cuenta como
+            ingreso ni como gasto.
+          </p>
+        )}
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="amount">Monto ({currency})</Label>
@@ -195,7 +227,7 @@ export function TransactionForm({
             onChange={(e) => setAmountText(e.target.value)}
             required
           />
-          {usual && (
+          {usual && !isTransfer && (
             <UsualDiffNote
               type={type}
               amountCents={typedCents === null ? null : Number(typedCents)}
@@ -221,12 +253,12 @@ export function TransactionForm({
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="accountId">Cuenta</Label>
+            <Label htmlFor="accountId">{isTransfer ? "Desde" : "Cuenta"}</Label>
             <NativeSelect
-              key={`account-${templateId}`}
               id="accountId"
               name="accountId"
-              defaultValue={prefill.accountId}
+              value={fromAccountId}
+              onChange={(e) => changeFromAccount(e.target.value)}
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -237,17 +269,44 @@ export function TransactionForm({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="categoryId">Categoría</Label>
-          <CategorySelect
-            // Al cambiar entre gasto e ingreso (o de gasto fijo) cambian las opciones: remontamos el select.
-            key={`category-${type}-${templateId}`}
-            id="categoryId"
-            name="categoryId"
-            categories={visibleCategories}
-            defaultValue={prefill.type === type ? prefill.categoryId : null}
-          />
-        </div>
+        {isTransfer ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="toAccountId">Hacia</Label>
+            {toAccounts.length === 0 ? (
+              <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
+                Necesitas otra cuenta para transferir, por ejemplo «Efectivo» o tu tarjeta.{" "}
+                <Link href="/cuentas/nueva" className="font-medium text-primary underline-offset-4 hover:underline">
+                  Crear cuenta
+                </Link>
+              </p>
+            ) : (
+              <NativeSelect
+                id="toAccountId"
+                name="toAccountId"
+                value={toAccountId}
+                onChange={(e) => setToAccountId(e.target.value)}
+              >
+                {toAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="categoryId">Categoría</Label>
+            <CategorySelect
+              // Al cambiar entre gasto e ingreso (o de gasto fijo) cambian las opciones: remontamos el select.
+              key={`category-${type}-${templateId}`}
+              id="categoryId"
+              name="categoryId"
+              categories={visibleCategories}
+              defaultValue={prefill.type === type ? prefill.categoryId : null}
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="merchant">
@@ -259,7 +318,13 @@ export function TransactionForm({
             name="merchant"
             autoComplete="off"
             className="h-10"
-            placeholder={type === "EXPENSE" ? "Supermercado, farmacia…" : "Sueldo de octubre…"}
+            placeholder={
+              type === "EXPENSE"
+                ? "Supermercado, farmacia…"
+                : type === "INCOME"
+                  ? "Sueldo de octubre…"
+                  : "Retiro en cajero, pago de la AMEX…"
+            }
             defaultValue={prefill.merchant}
             maxLength={100}
           />
