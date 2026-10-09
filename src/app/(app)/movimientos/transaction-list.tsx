@@ -1,4 +1,4 @@
-import { ArrowLeftRightIcon } from "lucide-react";
+import { ArrowLeftRightIcon, PaperclipIcon } from "lucide-react";
 import Link from "next/link";
 
 import { CategoryBadge } from "@/components/category-badge";
@@ -20,6 +20,7 @@ export type TransactionListItem = {
   account: { name: string };
   toAccount: { name: string } | null; // solo transferencias
   createdBy: { firstName: string | null; lastName: string | null; email: string };
+  _count: { receipts: number };
 };
 
 // Lista de movimientos agrupada por día. `showAuthor` en espacios compartidos.
@@ -72,8 +73,11 @@ function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolea
     <>
       <CategoryBadge name={t.category?.name ?? null} color={t.category?.color ?? null} className="size-8 text-xs" />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
-          {t.merchant || t.category?.name || (type === "EXPENSE" ? "Gasto" : "Ingreso")}
+        <p className="flex items-center gap-1 font-medium">
+          <span className="truncate">
+            {t.merchant || t.category?.name || (type === "EXPENSE" ? "Gasto" : "Ingreso")}
+          </span>
+          <ReceiptMark count={t._count.receipts} />
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {[t.merchant ? t.category?.name : null, t.account.name, showAuthor ? shortName(t.createdBy) : null]
@@ -112,8 +116,11 @@ function TransferRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: bo
         <span className="sr-only">Transferencia</span>
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
-          {t.account.name} → {t.toAccount?.name ?? "—"}
+        <p className="flex items-center gap-1 font-medium">
+          <span className="truncate">
+            {t.account.name} → {t.toAccount?.name ?? "—"}
+          </span>
+          <ReceiptMark count={t._count.receipts} />
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {["Transferencia", t.merchant, showAuthor ? shortName(t.createdBy) : null].filter(Boolean).join(" · ")}
@@ -126,9 +133,18 @@ function TransferRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: bo
   );
 }
 
+// Clip junto al nombre si el movimiento tiene factura.
+function ReceiptMark({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Con factura" />
+  );
+}
+
 export const transactionListInclude = {
   category: { select: { name: true, color: true } },
   account: { select: { name: true } },
   toAccount: { select: { name: true } },
   createdBy: { select: profileNameSelect },
+  _count: { select: { receipts: true } },
 } as const;

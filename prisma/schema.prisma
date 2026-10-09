@@ -68,6 +68,8 @@ model Profile {
   createdTransactions Transaction[]
   uploadedReceipts    Receipt[]
   captureSessions     CaptureSession[]
+  priceEntries        PriceEntry[]
+  shoppingLists       ShoppingList[]
 
   @@map("profiles")
 }
@@ -86,6 +88,11 @@ model Workspace {
   templates       TransactionTemplate[]
   receipts        Receipt[]
   captureSessions CaptureSession[]
+  stores          Store[]
+  products        Product[]
+  productAliases  ProductAlias[]
+  priceEntries    PriceEntry[]
+  shoppingLists   ShoppingList[]
 
   @@map("workspaces")
 }
@@ -213,6 +220,9 @@ model Receipt {
   uploadedBy     Profile         @relation(fields: [uploadedById], references: [id])
   transaction    Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   captureSession CaptureSession?
+  priceEntries   PriceEntry[]
+  // Cuándo se guardaron en el comparador los productos leídos de esta factura.
+  itemsSavedAt   DateTime?       @map("items_saved_at") @db.Timestamptz
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@map("receipts")
@@ -235,4 +245,133 @@ model CaptureSession {
 
   @@index([userId])
   @@map("capture_sessions")
+}
+
+// ─── Comparador de precios y lista de compras ────────────────────────────────────────────
+// Un producto es lo que se compara ("Detergente líquido"); cada precio visto guarda la marca
+// y la medida concretas ("Deja 1 L"). Para comparar se usa el precio por unidad base (ml, g o
+// unidad), así 1 L se compara con 2 × 500 ml.
+
+enum ProductUnit {
+  ML // líquidos: se muestran en ml / L
+  G // sólidos: g / kg
+  UNIT // unidades: rollos, huevos…
+}
+
+enum PriceSource {
+  MANUAL // escrito en el comparador
+  SHOPPING // marcado en la lista de compras, en el súper
+  RECEIPT // leído de una factura
+}
+
+model Store {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  priceEntries  PriceEntry[]
+  shoppingLists ShoppingList[]
+
+  @@unique([workspaceId, name])
+  @@map("stores")
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @map("workspace_id") @db.Uuid
+  name        String
+  unit        ProductUnit
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  aliases       ProductAlias[]
+  priceEntries  PriceEntry[]
+  shoppingItems ShoppingListItem[]
+
+  @@unique([workspaceId, name])
+  @@map("products")
+}
+
+// Cómo aparece un producto en las facturas ("DET LIQ DEJA 1000ML"), para reconocerlo
+// en las siguientes sin preguntar.
+model ProductAlias {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  text        String // en mayúsculas y sin espacios repetidos
+  productId   String @map("product_id") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, text])
+  @@map("product_aliases")
+}
+
+// Precio de UN paquete de un producto en un supermercado, un día.
+model PriceEntry {
+  id                String      @id @default(uuid()) @db.Uuid
+  workspaceId       String      @map("workspace_id") @db.Uuid
+  productId         String      @map("product_id") @db.Uuid
+  storeId           String      @map("store_id") @db.Uuid
+  createdById       String      @map("created_by_id") @db.Uuid
+  brand             String?
+  description       String? // texto de la factura o nota
+  sizeEach          Float       @map("size_each") // medida de cada unidad del paquete, en la unidad base del producto
+  packCount         Int         @default(1) @map("pack_count") // unidades en el paquete ("3 × 400 g")
+  priceCents        BigInt      @map("price_cents") // lo que cuesta el paquete (con la oferta, si hay)
+  regularPriceCents BigInt?     @map("regular_price_cents") // precio normal, si estaba en oferta y se conoce
+  onSale            Boolean     @default(false) @map("on_sale")
+  source            PriceSource
+  receiptId         String?     @map("receipt_id") @db.Uuid
+  date              DateTime    @db.Date
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store        Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy    Profile           @relation(fields: [createdById], references: [id])
+  receipt      Receipt?          @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  shoppingItem ShoppingListItem?
+
+  @@index([productId, date(sort: Desc)])
+  @@index([receiptId])
+  @@map("price_entries")
+}
+
+model ShoppingList {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  createdById String    @map("created_by_id") @db.Uuid
+  name        String
+  storeId     String?   @map("store_id") @db.Uuid // dónde se está comprando
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy Profile            @relation(fields: [createdById], references: [id])
+  store     Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  items     ShoppingListItem[]
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("shopping_lists")
+}
+
+model ShoppingListItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  listId       String    @map("list_id") @db.Uuid
+  productId    String    @map("product_id") @db.Uuid
+  note         String? // "el grande", "sin lactosa"…
+  quantity     Int       @default(1) // paquetes que se llevan
+  priceEntryId String?   @unique @map("price_entry_id") @db.Uuid // precio marcado en el súper
+  checkedAt    DateTime? @map("checked_at") @db.Timestamptz // ya está en el carrito
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  list       ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceEntry PriceEntry?  @relation(fields: [priceEntryId], references: [id], onDelete: SetNull)
+
+  @@index([listId])
+  @@map("shopping_list_items")
 }

@@ -6,8 +6,10 @@ import { db } from "@/lib/db";
 import { getFormOptions } from "@/lib/form-options";
 import { centsToInput } from "@/lib/money";
 import { fullName, profileNameSelect } from "@/lib/profile-name";
+import { toReceiptViews } from "@/lib/receipts";
 
 import { TransactionForm } from "../transaction-form";
+import { TransactionReceipts } from "../transaction-receipts";
 
 export const metadata = { title: "Editar movimiento" };
 
@@ -22,11 +24,18 @@ export default async function EditTransactionPage({
     include: {
       createdBy: { select: profileNameSelect },
       template: { select: { name: true, amountCents: true } },
+      receipts: {
+        select: { id: true, storagePath: true, mimeType: true, status: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
   if (!transaction) notFound();
 
-  const { accounts, categories } = await getFormOptions(workspace.id);
+  const [{ accounts, categories }, receipts] = await Promise.all([
+    getFormOptions(workspace.id),
+    toReceiptViews(transaction.receipts),
+  ]);
   const author = fullName(transaction.createdBy);
 
   return (
@@ -66,6 +75,7 @@ export default async function EditTransactionPage({
             : null,
         }}
       />
+      <TransactionReceipts transactionId={transaction.id} receipts={receipts} />
     </div>
   );
 }

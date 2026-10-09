@@ -22,6 +22,8 @@ const transactionSchema = z.object({
   merchant: z.string().trim().max(100),
   notes: z.string().trim().max(500),
   templateId: z.union([z.uuid(), z.literal("")]).default(""),
+  // Factura subida en el formulario (solo al crear).
+  receiptId: z.union([z.uuid(), z.literal("")]).default(""),
 });
 
 // transactionId = null → crear; si no, editar ese movimiento.
@@ -101,9 +103,22 @@ export async function saveTransaction(
   if (transactionId) {
     await db.transaction.update({ where: { id: transactionId }, data });
   } else {
-    await db.transaction.create({
+    const created = await db.transaction.create({
       data: { ...data, workspaceId, createdById: profile.id },
     });
+    if (input.receiptId) {
+      // Solo una factura del mismo espacio que aún no esté en otro movimiento.
+      const { count } = await db.receipt.updateMany({
+        where: { id: input.receiptId, workspaceId, transactionId: null },
+        data: { transactionId: created.id, status: "CONFIRMED" },
+      });
+      // Si la IA leyó productos, seguimos a guardar sus precios en el comparador.
+      const receipt = count > 0 ? await db.receipt.findUnique({ where: { id: input.receiptId } }) : null;
+      const items = (receipt?.extractedData as { items?: unknown[] } | null)?.items;
+      if (receipt && !receipt.itemsSavedAt && items && items.length > 0) {
+        redirect(`/facturas/${receipt.id}?desde=movimiento`);
+      }
+    }
   }
 
   redirect(`/movimientos?mes=${input.date.slice(0, 7)}`);
