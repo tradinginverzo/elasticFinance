@@ -25,13 +25,26 @@ export type TransactionListItem = {
 };
 
 // Lista de movimientos agrupada por día. `showAuthor` en espacios compartidos.
+// Sin agrupar (p. ej. ordenada por monto), cada fila muestra su fecha.
 export function TransactionList({
   transactions,
   showAuthor = false,
+  groupByDay = true,
 }: {
   transactions: TransactionListItem[];
   showAuthor?: boolean;
+  groupByDay?: boolean;
 }) {
+  if (!groupByDay) {
+    return (
+      <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+        {transactions.map((t) => (
+          <TransactionRow key={t.id} t={t} showAuthor={showAuthor} showDate />
+        ))}
+      </ul>
+    );
+  }
+
   const groups = new Map<string, TransactionListItem[]>();
   for (const t of transactions) {
     const key = t.date.toISOString().slice(0, 10);
@@ -47,18 +60,7 @@ export function TransactionList({
           </h3>
           <ul className="divide-y overflow-hidden rounded-xl border bg-card">
             {items.map((t) => (
-              <li key={t.id}>
-                <Link
-                  href={`/movimientos/${t.id}`}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
-                >
-                  {t.type === "TRANSFER" ? (
-                    <TransferRow t={t} showAuthor={showAuthor} />
-                  ) : (
-                    <FlowRow t={t} showAuthor={showAuthor} />
-                  )}
-                </Link>
-              </li>
+              <TransactionRow key={t.id} t={t} showAuthor={showAuthor} />
             ))}
           </ul>
         </section>
@@ -67,8 +69,22 @@ export function TransactionList({
   );
 }
 
+type RowProps = { t: TransactionListItem; showAuthor: boolean; showDate?: boolean };
+
+function TransactionRow(props: RowProps) {
+  return (
+    <li>
+      <Link href={`/movimientos/${props.t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50">
+        {props.t.type === "TRANSFER" ? <TransferRow {...props} /> : <FlowRow {...props} />}
+      </Link>
+    </li>
+  );
+}
+
+const shortDate = (date: Date) => formatDate(date, { day: "numeric", month: "short" });
+
 // Gasto o ingreso: insignia de categoría, monto con signo y color.
-function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolean }) {
+function FlowRow({ t, showAuthor, showDate = false }: RowProps) {
   const type = t.type === "INCOME" ? "INCOME" : "EXPENSE";
   return (
     <>
@@ -82,7 +98,12 @@ function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolea
           <ReceiptMark count={t._count.receipts} />
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {[t.merchant ? t.category?.name : null, t.account.name, showAuthor ? shortName(t.createdBy) : null]
+          {[
+            showDate ? shortDate(t.date) : null,
+            t.merchant ? t.category?.name : null,
+            t.account.name,
+            showAuthor ? shortName(t.createdBy) : null,
+          ]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -110,7 +131,7 @@ function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolea
 }
 
 // Transferencia: "Chibuleo → Efectivo", monto neutro (no es ingreso ni gasto).
-function TransferRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolean }) {
+function TransferRow({ t, showAuthor, showDate = false }: RowProps) {
   return (
     <>
       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -125,7 +146,9 @@ function TransferRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: bo
           <ReceiptMark count={t._count.receipts} />
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {["Transferencia", t.merchant, showAuthor ? shortName(t.createdBy) : null].filter(Boolean).join(" · ")}
+          {[showDate ? shortDate(t.date) : null, "Transferencia", t.merchant, showAuthor ? shortName(t.createdBy) : null]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
       <span className="font-semibold whitespace-nowrap text-muted-foreground tabular-nums">
