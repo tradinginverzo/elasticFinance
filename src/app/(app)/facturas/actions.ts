@@ -123,7 +123,7 @@ export async function saveReceiptItems(
   }
 
   const entries = [];
-  const aliases = new Map<string, string>();
+  const aliases = new Map<string, { productId: string; brand: string | null; sizeEach: number; packCount: number }>();
   for (const { item, product, unit, price } of rows) {
     const target = product ?? (await findOrCreateProduct(workspace.id, item.newName.slice(0, 60), unit));
     entries.push({
@@ -139,17 +139,25 @@ export async function saveReceiptItems(
       description: item.text.slice(0, 200) || null,
       date,
     });
-    if (item.text.trim()) aliases.set(aliasText(item.text), target.id);
+    // Se recuerda también la marca y la medida: la próxima factura igual vendrá rellenada.
+    if (item.text.trim()) {
+      aliases.set(aliasText(item.text), {
+        productId: target.id,
+        brand: price.brand,
+        sizeEach: price.sizeEach,
+        packCount: price.packCount,
+      });
+    }
   }
 
   await db.$transaction([
     db.priceEntry.deleteMany({ where: { receiptId: receipt.id } }),
     db.priceEntry.createMany({ data: entries }),
-    ...[...aliases].map(([text, productId]) =>
+    ...[...aliases].map(([text, alias]) =>
       db.productAlias.upsert({
         where: { workspaceId_text: { workspaceId: workspace.id, text } },
-        create: { workspaceId: workspace.id, text, productId },
-        update: { productId },
+        create: { workspaceId: workspace.id, text, ...alias },
+        update: alias,
       }),
     ),
     db.receipt.update({ where: { id: receipt.id }, data: { itemsSavedAt: new Date() } }),

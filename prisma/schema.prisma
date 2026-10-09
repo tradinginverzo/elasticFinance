@@ -297,10 +297,14 @@ model Product {
 // Cómo aparece un producto en las facturas ("DET LIQ DEJA 1000ML"), para reconocerlo
 // en las siguientes sin preguntar.
 model ProductAlias {
-  id          String @id @default(uuid()) @db.Uuid
-  workspaceId String @map("workspace_id") @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @map("workspace_id") @db.Uuid
   text        String // en mayúsculas y sin espacios repetidos
-  productId   String @map("product_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  // Lo último confirmado para esa línea: las facturas (p. ej. Supermaxi) no siempre traen la medida.
+  brand       String?
+  sizeEach    Float?  @map("size_each")
+  packCount   Int?    @map("pack_count")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)

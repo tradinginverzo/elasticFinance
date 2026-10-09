@@ -105,6 +105,8 @@ export type ExtractedItem = {
   quantity: number;
   line_total: number;
   discount: number | null;
+  discount_percent?: number | null; // % de una oferta por categoría (resumen al final, p. ej. Supermaxi)
+  taxed?: boolean; // paga IVA aparte (precio de la línea sin IVA)
 };
 
 // Lo que guardamos en receipts.extracted_data (la respuesta de la IA, tal cual).
@@ -117,6 +119,8 @@ export type Extracted = {
   merchant: string | null;
   category: string | null;
   summary: string | null;
+  line_prices_include_tax?: boolean; // false: los precios de las líneas no traen el IVA (se suma al final)
+  tax_rate?: number | null; // p. ej. 15
   tendered?: number | null; // lo que se entregó para pagar (p. ej. el billete de $20)
   change?: number | null; // el cambio o vuelto que se recibió
   items?: ExtractedItem[]; // facturas leídas antes del comparador no los tienen
@@ -141,6 +145,12 @@ const EXTRACT_SCHEMA = {
       description:
         "TOTAL de la compra (lo que cuesta), con impuestos y propina. NO es lo que el cliente entregó para pagar (efectivo, «recibido», «pago») ni el cambio o vuelto. Número con punto decimal, sin separador de miles.",
     },
+    line_prices_include_tax: {
+      type: "boolean",
+      description:
+        "true si el precio de cada línea ya incluye el IVA. false si las líneas van sin IVA y el impuesto se suma al final (p. ej. «Subtotal sin IVA» + «15% IVA», con productos gravados marcados con «I» o «*»).",
+    },
+    tax_rate: { type: ["number", "null"], description: "Tasa del IVA en %, p. ej. 15. null si no aparece." },
     tendered: {
       type: ["number", "null"],
       description: "Lo que el cliente entregó para pagar, si aparece (efectivo, «recibido», «pago con»). null si no aparece.",
@@ -166,7 +176,7 @@ const EXTRACT_SCHEMA = {
     items: {
       type: "array",
       description:
-        "Cada producto comprado. Sin subtotales, impuestos ni líneas de descuento (el descuento va en el producto al que se aplica). Vacío si no es una compra de productos.",
+        "Cada producto comprado. Sin subtotales, impuestos ni líneas de descuento: el descuento va en el producto al que se aplica. Los descuentos pueden estar debajo del producto o en un resumen de ofertas/ahorros al final de la factura (p. ej. Supermaxi): en ese caso relaciona cada oferta del resumen con su producto por el nombre. Vacío si no es una compra de productos.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -180,23 +190,53 @@ const EXTRACT_SCHEMA = {
           unit: {
             type: "string",
             enum: ["ML", "G", "UNIT"],
-            description: "ML para líquidos, G para lo que se vende por peso, UNIT para lo que se cuenta (rollos, huevos…).",
+            description:
+              "Cómo se mide el producto por naturaleza, aunque la factura no traiga la medida: ML para líquidos (leche, aceite, agua), G para sólidos que se venden por peso o en paquetes de peso (arroz, café, cereal, carne), UNIT para lo que se cuenta (huevos, rollos, pañales).",
           },
           brand: { type: ["string", "null"], description: "Marca, si se ve." },
           size_each: {
             type: ["number", "null"],
             description:
-              "Medida de cada unidad en ml (ML) o g (G); 1 para UNIT. Lo pesado a granel (0,85 kg de tomate): 850. null si no aparece.",
+              "Medida de cada unidad en ml (ML), g (G) o unidades (UNIT), SOLO si aparece impresa en la línea (p. ej. «1000ML», «2KG», «X12»). Lo pesado a granel (0,850 kg de tomate): 850. Si la factura no muestra la medida, null: no la supongas.",
           },
           pack_count: {
             type: "integer",
             description: "Unidades en el paquete (papel 4 rollos → 4; pack 3 × 400 g → 3). Normalmente 1.",
           },
           quantity: { type: "number", description: "Paquetes comprados (en lo pesado a granel, 1)." },
-          line_total: { type: "number", description: "Lo pagado por la línea, ya con su descuento." },
-          discount: { type: ["number", "null"], description: "Descuento u oferta aplicado a esta línea (positivo)." },
+          line_total: {
+            type: "number",
+            description:
+              "Lo pagado por la línea YA RESTANDO su descuento, aunque el descuento aparezca en otra parte de la factura (resumen de ofertas al final).",
+          },
+          discount_percent: {
+            type: ["number", "null"],
+            description:
+              "Si el resumen de descuentos al final es por categoría o promoción con porcentaje (p. ej. «30 % CEREALES», «20 % HUGGIES PAÑALES», «15 % MARCA PROPIA»), el porcentaje que corresponde a este producto según su nombre. null si ninguno le corresponde con claridad.",
+          },
+          taxed: {
+            type: "boolean",
+            description: "true si este producto paga IVA (en muchas facturas va marcado con «I», «G» o «*» junto al precio).",
+          },
+          discount: {
+            type: ["number", "null"],
+            description:
+              "Descuento u oferta aplicado a esta línea (positivo), tomado de la propia línea o del resumen de ofertas/ahorros al final. null si la factura no muestra descuento para este producto (no lo supongas).",
+          },
         },
-        required: ["text", "product", "unit", "brand", "size_each", "pack_count", "quantity", "line_total", "discount"],
+        required: [
+          "text",
+          "product",
+          "unit",
+          "brand",
+          "size_each",
+          "pack_count",
+          "quantity",
+          "line_total",
+          "discount",
+          "discount_percent",
+          "taxed",
+        ],
       },
     },
   },
@@ -204,6 +244,8 @@ const EXTRACT_SCHEMA = {
     "is_receipt",
     "type",
     "total",
+    "line_prices_include_tax",
+    "tax_rate",
     "tendered",
     "change",
     "currency",

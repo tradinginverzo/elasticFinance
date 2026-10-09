@@ -87,7 +87,7 @@ export function ReceiptItemsForm({
           });
           setError(result.error);
           if (!result.error) {
-            toast.success(`${included.length} precios guardados`);
+            toast.success(included.length === 1 ? "Precio guardado" : `${included.length} precios guardados`);
             router.push("/precios");
           }
         });
@@ -159,7 +159,9 @@ export function ReceiptItemsForm({
 
       <FormError message={error} />
       <Button type="submit" className="h-11" disabled={pending || included.length === 0}>
-        {pending ? "Guardando…" : `${saved ? "Volver a guardar" : "Guardar"} ${included.length} precios`}
+        {pending
+          ? "Guardando…"
+          : `${saved ? "Volver a guardar" : "Guardar"} ${included.length} ${included.length === 1 ? "precio" : "precios"}`}
       </Button>
     </form>
   );

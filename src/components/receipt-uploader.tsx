@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraIcon, LoaderCircleIcon, SmartphoneIcon } from "lucide-react";
+import { LoaderCircleIcon, ReceiptTextIcon, SmartphoneIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { deleteReceipt, scanReceipt, startReceiptUpload } from "@/app/(app)/facturas/actions";
@@ -107,7 +107,7 @@ export function ReceiptUploader({
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
-        {busy ? <LoaderCircleIcon className="animate-spin" /> : <CameraIcon />}
+        {busy ? <LoaderCircleIcon className="animate-spin" /> : <ReceiptTextIcon />}
         {step === "idle" ? label : step === "reading" && read ? "Leyendo la factura…" : "Subiendo…"}
       </Button>
 

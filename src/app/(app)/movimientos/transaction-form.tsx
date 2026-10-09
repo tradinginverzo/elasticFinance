@@ -471,14 +471,26 @@ function ReceiptCard({ receipt, onRemove }: { receipt: FormReceipt; onRemove: ()
     ? "Factura adjunta. Escribe los datos del movimiento."
     : (receipt.error ??
       `Datos leídos de la factura. Revísalos antes de guardar.${
-        receipt.scan?.itemCount ? ` Después podrás guardar los precios de sus ${receipt.scan.itemCount} productos.` : ""
+        receipt.scan?.itemCount
+          ? ` Después podrás guardar ${receipt.scan.itemCount === 1 ? "el precio de su producto" : `los precios de sus ${receipt.scan.itemCount} productos`}.`
+          : ""
       }`);
+  const itemCount = receipt.scan?.itemCount ?? 0;
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-muted/40 p-2">
       <ReceiptThumb url={receipt.previewUrl} isPdf={receipt.isPdf} className="size-14" />
-      <p className={cn("min-w-0 flex-1 text-sm", failed ? "text-destructive" : "text-muted-foreground")}>
-        {message}
-      </p>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className={cn("text-sm", failed ? "text-destructive" : "text-muted-foreground")}>{message}</p>
+        {/* Para tickets que solo sirven para comparar precios: sin crear el movimiento. */}
+        {itemCount > 0 && (
+          <Link
+            href={`/facturas/${receipt.receiptId}`}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Solo guardar los precios
+          </Link>
+        )}
+      </div>
       <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
         Quitar
       </Button>
