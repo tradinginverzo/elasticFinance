@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
+import { BranchInput } from "@/components/prices/branch-input";
 import { PriceFields } from "@/components/prices/price-fields";
 import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ export function ReceiptItemsForm({
   initialStoreId,
   initialStoreName,
   initialDate,
+  initialBranch,
+  branches,
   currency,
   saved,
 }: {
@@ -50,6 +53,8 @@ export function ReceiptItemsForm({
   initialStoreId: string;
   initialStoreName: string;
   initialDate: string;
+  initialBranch: string;
+  branches: Record<string, string[]>;
   currency: string;
   saved: boolean;
 }) {
@@ -58,6 +63,7 @@ export function ReceiptItemsForm({
   const [storeId, setStoreId] = useState(initialStoreId || NEW);
   const [newStoreName, setNewStoreName] = useState(initialStoreName);
   const [date, setDate] = useState(initialDate);
+  const [branch, setBranch] = useState(initialBranch);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -75,6 +81,7 @@ export function ReceiptItemsForm({
           const result = await saveReceiptItems(receiptId, {
             storeId: storeId === NEW ? "" : storeId,
             newStoreName,
+            branch,
             date,
             items: included.map(({ text, productId, newName, unit, quantity, draft }) => ({
               text,
@@ -115,6 +122,11 @@ export function ReceiptItemsForm({
               onChange={(e) => setNewStoreName(e.target.value)}
             />
           )}
+          <BranchInput
+            value={branch}
+            onChange={setBranch}
+            suggestions={storeId === NEW ? [] : (branches[storeId] ?? [])}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="receipt-date">Fecha</Label>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireWorkspace } from "@/lib/context";
 import { db } from "@/lib/db";
 import type { ProductReference } from "@/lib/price-compare";
-import { getProductReferences, getStores } from "@/lib/prices";
+import { getBranches, getProductReferences, getStores } from "@/lib/prices";
 
 import { type ListItem, ShoppingView } from "./shopping-view";
 
@@ -23,8 +23,9 @@ export default async function ShoppingListPage({ params }: PageProps<"/compras/[
   });
   if (!list) notFound();
 
-  const [stores, products, references] = await Promise.all([
+  const [stores, branches, products, references] = await Promise.all([
     getStores(workspace.id),
+    getBranches(workspace.id),
     db.product.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { name: "asc" },
@@ -58,7 +59,14 @@ export default async function ShoppingListPage({ params }: PageProps<"/compras/[
 
   return (
     <ShoppingView
-      list={{ id: list.id, name: list.name, storeId: list.storeId, completed: list.completedAt !== null }}
+      list={{
+        id: list.id,
+        name: list.name,
+        storeId: list.storeId,
+        branch: list.branch,
+        completed: list.completedAt !== null,
+      }}
+      branches={branches}
       items={items}
       stores={stores}
       products={products}

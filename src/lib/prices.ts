@@ -44,8 +44,45 @@ export async function findOrCreateProduct(workspaceId: string, rawName: string, 
   return existing ?? db.product.create({ data: { workspaceId, name, unit } });
 }
 
+// Sucursal opcional: "  las americas " → "Las americas"; vacío → null.
+export function cleanBranch(branch: string | null | undefined) {
+  const clean = branch ? cleanName(branch).slice(0, 60) : "";
+  return clean || null;
+}
+
+// Sucursales ya usadas en cada supermercado (para sugerirlas al escribir).
+export async function getBranches(workspaceId: string): Promise<Record<string, string[]>> {
+  const rows = await db.priceEntry.findMany({
+    where: { workspaceId, branch: { not: null } },
+    distinct: ["storeId", "branch"],
+    select: { storeId: true, branch: true },
+    orderBy: { branch: "asc" },
+  });
+  const byStore: Record<string, string[]> = {};
+  for (const r of rows) (byStore[r.storeId] ??= []).push(r.branch!);
+  return byStore;
+}
+
+// Todas las sucursales usadas en el espacio, para sugerirlas en el formulario de movimientos.
+export async function getAllBranches(workspaceId: string): Promise<string[]> {
+  const [prices, transactions] = await Promise.all([
+    db.priceEntry.findMany({
+      where: { workspaceId, branch: { not: null } },
+      distinct: ["branch"],
+      select: { branch: true },
+    }),
+    db.transaction.findMany({
+      where: { workspaceId, branch: { not: null } },
+      distinct: ["branch"],
+      select: { branch: true },
+    }),
+  ]);
+  return [...new Set([...prices, ...transactions].map((r) => r.branch!))].sort((a, b) => a.localeCompare(b, "es"));
+}
+
 type EntryWithStore = {
   storeId: string;
+  branch: string | null;
   store: { name: string };
   brand: string | null;
   sizeEach: number;
@@ -61,6 +98,7 @@ export function toSeenPrice(entry: EntryWithStore): SeenPrice {
   return {
     storeId: entry.storeId,
     storeName: entry.store.name,
+    branch: entry.branch,
     brand: entry.brand,
     sizeEach: entry.sizeEach,
     packCount: entry.packCount,

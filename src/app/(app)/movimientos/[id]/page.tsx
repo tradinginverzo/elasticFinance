@@ -5,6 +5,7 @@ import { toDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { getFormOptions } from "@/lib/form-options";
 import { centsToInput } from "@/lib/money";
+import { getAllBranches } from "@/lib/prices";
 import { fullName, profileNameSelect } from "@/lib/profile-name";
 import { toReceiptViews } from "@/lib/receipts";
 
@@ -25,16 +26,23 @@ export default async function EditTransactionPage({
       createdBy: { select: profileNameSelect },
       template: { select: { name: true, amountCents: true } },
       receipts: {
-        select: { id: true, storagePath: true, mimeType: true, status: true },
+        select: {
+          id: true,
+          storagePath: true,
+          mimeType: true,
+          status: true,
+          _count: { select: { priceEntries: true } },
+        },
         orderBy: { createdAt: "asc" },
       },
     },
   });
   if (!transaction) notFound();
 
-  const [{ accounts, categories }, receipts] = await Promise.all([
+  const [{ accounts, categories }, receipts, branchSuggestions] = await Promise.all([
     getFormOptions(workspace.id),
     toReceiptViews(transaction.receipts),
+    getAllBranches(workspace.id),
   ]);
   const author = fullName(transaction.createdBy);
 
@@ -55,6 +63,7 @@ export default async function EditTransactionPage({
         accounts={accounts}
         categories={categories}
         currency={transaction.currency}
+        branchSuggestions={branchSuggestions}
         transaction={{
           id: transaction.id,
           type: transaction.type,
@@ -64,6 +73,7 @@ export default async function EditTransactionPage({
           toAccountId: transaction.toAccountId,
           categoryId: transaction.categoryId,
           merchant: transaction.merchant,
+          branch: transaction.branch,
           notes: transaction.notes,
           templateId: transaction.templateId,
           usual: transaction.template

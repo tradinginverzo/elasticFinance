@@ -159,6 +159,7 @@ model Transaction {
   currency            String          @db.Char(3)
   date                DateTime        @db.Date
   merchant            String?
+  branch              String? // sucursal opcional del comercio ("Las Américas")
   notes               String?
   templateId          String?         @map("template_id") @db.Uuid // gasto fijo del que salió, si lo hay
   // Monto habitual del gasto fijo al registrarlo: para marcar si este mes fue distinto
@@ -319,6 +320,7 @@ model PriceEntry {
   workspaceId       String      @map("workspace_id") @db.Uuid
   productId         String      @map("product_id") @db.Uuid
   storeId           String      @map("store_id") @db.Uuid
+  branch            String? // sucursal opcional ("Las Américas"); se compara por cadena
   createdById       String      @map("created_by_id") @db.Uuid
   brand             String?
   description       String? // texto de la factura o nota
@@ -350,6 +352,7 @@ model ShoppingList {
   createdById String    @map("created_by_id") @db.Uuid
   name        String
   storeId     String?   @map("store_id") @db.Uuid // dónde se está comprando
+  branch      String? // sucursal opcional
   completedAt DateTime? @map("completed_at") @db.Timestamptz
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
 

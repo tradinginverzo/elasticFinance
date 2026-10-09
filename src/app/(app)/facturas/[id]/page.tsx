@@ -6,7 +6,7 @@ import { requireWorkspace } from "@/lib/context";
 import { todayInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { emptyDraft } from "@/lib/price-draft";
-import { aliasText, getStores } from "@/lib/prices";
+import { aliasText, getBranches, getStores } from "@/lib/prices";
 import { type Extracted, receiptReadingEnabled, toReceiptViews } from "@/lib/receipts";
 import { fromBaseSize } from "@/lib/units";
 
@@ -22,15 +22,19 @@ export default async function ReceiptItemsPage({ params, searchParams }: PagePro
   const { workspace } = await requireWorkspace();
   const receipt = await db.receipt.findFirst({
     where: { id, workspaceId: workspace.id },
-    include: { _count: { select: { priceEntries: true } } },
+    include: {
+      _count: { select: { priceEntries: true } },
+      transaction: { select: { branch: true } },
+    },
   });
   if (!receipt) notFound();
 
   const extracted = (receipt.extractedData ?? null) as Extracted | null;
   const items = extracted?.items ?? [];
-  const [[view], stores, products, aliases] = await Promise.all([
+  const [[view], stores, branches, products, aliases] = await Promise.all([
     toReceiptViews([receipt]),
     getStores(workspace.id),
+    getBranches(workspace.id),
     db.product.findMany({
       where: { workspaceId: workspace.id },
       orderBy: { name: "asc" },
@@ -150,6 +154,8 @@ export default async function ReceiptItemsPage({ params, searchParams }: PagePro
           initialStoreId={storeMatch?.id ?? (stores.length > 0 && !extracted?.merchant ? stores[0].id : "")}
           initialStoreName={storeMatch ? "" : (extracted?.merchant ?? "")}
           initialDate={extracted?.date ?? todayInput()}
+          initialBranch={receipt.transaction?.branch ?? extracted?.branch ?? ""}
+          branches={branches}
           currency={workspace.currency}
           saved={receipt.itemsSavedAt !== null}
         />

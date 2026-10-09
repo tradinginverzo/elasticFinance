@@ -79,7 +79,13 @@ export async function deleteReceiptFiles(paths: string[]) {
 
 // Facturas con URLs firmadas para verlas (caducan a los 10 minutos).
 export async function toReceiptViews(
-  receipts: { id: string; storagePath: string; mimeType: string; status: ReceiptView["status"] }[],
+  receipts: {
+    id: string;
+    storagePath: string;
+    mimeType: string;
+    status: ReceiptView["status"];
+    _count?: { priceEntries: number };
+  }[],
 ): Promise<ReceiptView[]> {
   if (receipts.length === 0) return [];
   const { data } = await storage().createSignedUrls(
@@ -91,6 +97,7 @@ export async function toReceiptViews(
     url: data?.[i]?.signedUrl ?? null,
     mimeType: r.mimeType,
     status: r.status,
+    priceCount: r._count?.priceEntries ?? 0,
   }));
 }
 
@@ -119,6 +126,7 @@ export type Extracted = {
   merchant: string | null;
   category: string | null;
   summary: string | null;
+  branch?: string | null; // sucursal ("Plaza Las Américas"), si la factura la dice
   line_prices_include_tax?: boolean; // false: los precios de las líneas no traen el IVA (se suma al final)
   tax_rate?: number | null; // p. ej. 15
   tendered?: number | null; // lo que se entregó para pagar (p. ej. el billete de $20)
@@ -163,7 +171,13 @@ const EXTRACT_SCHEMA = {
     date: { type: ["string", "null"], description: "Fecha de la compra en formato YYYY-MM-DD." },
     merchant: {
       type: ["string", "null"],
-      description: "Nombre comercial corto del negocio (p. ej. «Supermaxi», no la razón social completa).",
+      description:
+        "Nombre comercial corto de la cadena o negocio, sin la sucursal (p. ej. «Supermaxi», no «Supermaxi Plaza Las Américas» ni la razón social).",
+    },
+    branch: {
+      type: ["string", "null"],
+      description:
+        "Sucursal o local, si la factura lo dice (p. ej. «SUPERMAXI PLAZA LAS AMERICAS» → «Plaza Las Américas»). Con mayúsculas normales. null si no aparece.",
     },
     category: {
       type: ["string", "null"],
@@ -251,6 +265,7 @@ const EXTRACT_SCHEMA = {
     "currency",
     "date",
     "merchant",
+    "branch",
     "category",
     "summary",
     "items",
@@ -381,6 +396,7 @@ export async function toReceiptScan(
     amount: total === null ? null : centsToInput(BigInt(Math.round(total * 100))),
     date,
     merchant: data.merchant?.slice(0, 100) || null,
+    branch: data.branch?.slice(0, 60) || null,
     categoryId: category?.id ?? null,
     itemCount: data.items?.length ?? 0,
     notes:

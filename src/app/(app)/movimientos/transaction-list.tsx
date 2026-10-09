@@ -15,6 +15,7 @@ export type TransactionListItem = {
   currency: string;
   date: Date;
   merchant: string | null;
+  branch: string | null;
   templateAmountCents: bigint | null;
   category: { name: string; color: string | null } | null;
   account: { name: string };
@@ -76,6 +77,7 @@ function FlowRow({ t, showAuthor }: { t: TransactionListItem; showAuthor: boolea
         <p className="flex items-center gap-1 font-medium">
           <span className="truncate">
             {t.merchant || t.category?.name || (type === "EXPENSE" ? "Gasto" : "Ingreso")}
+            {t.merchant && t.branch && <span className="font-normal text-muted-foreground"> · {t.branch}</span>}
           </span>
           <ReceiptMark count={t._count.receipts} />
         </p>

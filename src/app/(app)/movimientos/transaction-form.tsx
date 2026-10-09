@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { CategorySelect } from "@/components/category-select";
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
+import { BranchInput } from "@/components/prices/branch-input";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { ReceiptUploader, type UploadedReceipt } from "@/components/receipt-uploader";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export type TransactionFormData = {
   toAccountId: string | null; // solo transferencias
   categoryId: string | null;
   merchant: string | null;
+  branch: string | null; // sucursal del comercio
   notes: string | null;
   templateId: string | null;
   // Gasto fijo del que salió y su monto habitual al registrarlo (para marcar si fue distinto).
@@ -91,9 +93,10 @@ function fillFromScan(scan: ReceiptScan | null, full: boolean): ScanFill | null 
     notes: scan.notes ?? undefined,
   };
   if (full) {
-    fill.type = scan.type;
+    // Una factura de compra es siempre un gasto (su categoría solo vale si la IA también lo vio así).
+    fill.type = "EXPENSE";
     fill.merchant = scan.merchant ?? undefined;
-    fill.categoryId = scan.categoryId ?? undefined;
+    if (scan.type === "EXPENSE") fill.categoryId = scan.categoryId ?? undefined;
   }
   return fill;
 }
@@ -107,6 +110,7 @@ export function TransactionForm({
   initialTemplateId = null,
   initialReceipt = null,
   receiptReadingEnabled = false,
+  branchSuggestions = [],
 }: {
   transaction?: TransactionFormData;
   accounts: { id: string; name: string }[];
@@ -116,6 +120,7 @@ export function TransactionForm({
   initialTemplateId?: string | null;
   initialReceipt?: FormReceipt | null;
   receiptReadingEnabled?: boolean;
+  branchSuggestions?: string[];
 }) {
   const { state, onSubmit, pending } = useFormAction(
     saveTransaction.bind(null, transaction?.id ?? null),
@@ -129,10 +134,12 @@ export function TransactionForm({
   const [scanFill, setScanFill] = useState<ScanFill | null>(() =>
     fillFromScan(initialReceipt?.scan ?? null, !template),
   );
+  // Sucursal del comercio (opcional): se muestra con factura o si el movimiento ya la tiene.
+  const [branch, setBranch] = useState(transaction?.branch ?? initialReceipt?.scan?.branch ?? "");
   // Cambia cada vez que llega una factura leída: remonta los campos con los nuevos valores.
   const [scanVersion, setScanVersion] = useState(0);
   const [type, setType] = useState<TransactionType>(
-    template?.type ?? scanFill?.type ?? transaction?.type ?? "EXPENSE",
+    initialReceipt ? "EXPENSE" : (template?.type ?? scanFill?.type ?? transaction?.type ?? "EXPENSE"),
   );
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -211,10 +218,14 @@ export function TransactionForm({
 
   function handleReceipt(uploaded: UploadedReceipt) {
     setReceipt(uploaded);
-    const fill = fillFromScan(uploaded.scan, !template && type !== "TRANSFER");
+    // Con factura el movimiento es un gasto: deja de ser transferencia o ingreso fijo.
+    const keepTemplate = template?.type === "EXPENSE";
+    if (template && !keepTemplate) applyTemplate("");
+    setType("EXPENSE");
+    if (uploaded.scan?.branch) setBranch(uploaded.scan.branch);
+    const fill = fillFromScan(uploaded.scan, !keepTemplate);
     if (!fill) return;
     setScanFill(fill);
-    if (fill.type) setType(fill.type);
     if (fill.amount) setAmountText(fill.amount);
     if (fill.date && dateRef.current) dateRef.current.value = fill.date;
     setScanVersion((v) => v + 1);
@@ -259,7 +270,8 @@ export function TransactionForm({
           !isTransfer &&
           (templates.length > 0 ? (
             <TemplatePicker
-              templates={templates}
+              // Con factura adjunta solo gastos fijos (es una compra).
+              templates={receipt ? templates.filter((t) => t.type === "EXPENSE") : templates}
               selectedId={templateId}
               onSelect={applyTemplate}
               currency={currency}
@@ -273,24 +285,27 @@ export function TransactionForm({
             </Link>
           ))}
 
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="Tipo">
-          {TYPE_OPTIONS.map(([value, label, activeColor]) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={type === value}
-              onClick={() => changeType(value)}
-              className={cn(
-                "h-9 truncate rounded-lg px-1 text-sm font-medium text-muted-foreground transition-colors",
-                type === value && "bg-background shadow-sm",
-                type === value && activeColor,
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Con una factura de compra adjunta solo cabe "Gasto": no se muestra el selector. */}
+        {!(receipt && !transaction) && (
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="Tipo">
+            {TYPE_OPTIONS.map(([value, label, activeColor]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={type === value}
+                onClick={() => changeType(value)}
+                className={cn(
+                  "h-9 truncate rounded-lg px-1 text-sm font-medium text-muted-foreground transition-colors",
+                  type === value && "bg-background shadow-sm",
+                  type === value && activeColor,
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {isTransfer && (
           <p className="-mt-2 text-xs text-muted-foreground">
             Pasa dinero de una cuenta a otra (retiro en efectivo, pago de la tarjeta…). No cuenta como
@@ -414,6 +429,13 @@ export function TransactionForm({
             maxLength={100}
           />
         </div>
+
+        {!isTransfer && (receipt || transaction?.branch) && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="branch">Sucursal (opcional)</Label>
+            <BranchInput id="branch" name="branch" value={branch} onChange={setBranch} suggestions={branchSuggestions} />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="notes">Notas</Label>

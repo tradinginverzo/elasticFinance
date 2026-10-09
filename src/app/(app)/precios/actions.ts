@@ -8,7 +8,7 @@ import { requireWorkspace } from "@/lib/context";
 import { parseDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { type PriceDraft, parseDraft } from "@/lib/price-draft";
-import { cleanName, findOrCreateStore, resolvePickedProduct } from "@/lib/prices";
+import { cleanBranch, cleanName, findOrCreateStore, resolvePickedProduct } from "@/lib/prices";
 
 type Result = { error: string | null };
 
@@ -51,6 +51,7 @@ export async function savePrice(input: {
   productId: string;
   storeId: string; // "" si es un supermercado nuevo
   newStoreName: string;
+  branch: string; // opcional
   date: string;
   draft: PriceDraft;
 }): Promise<Result> {
@@ -78,6 +79,7 @@ export async function savePrice(input: {
       workspaceId: workspace.id,
       productId: product.id,
       storeId: store.id,
+      branch: cleanBranch(input.branch),
       createdById: profile.id,
       source: "MANUAL",
       date,
