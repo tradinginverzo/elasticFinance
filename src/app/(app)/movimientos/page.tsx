@@ -3,6 +3,7 @@ import {
   ChevronRightIcon,
   PinIcon,
   PlusIcon,
+  ReceiptIcon,
   ReceiptTextIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -52,6 +53,15 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
           >
             <PinIcon />
             Gastos fijos
+          </Button>
+          <Button
+            variant="outline"
+            render={<Link href="/facturas" />}
+            nativeButton={false}
+            aria-label="Facturas"
+            className="size-9 md:hidden"
+          >
+            <ReceiptIcon />
           </Button>
           <Button
             render={<Link href="/movimientos/nuevo" />}

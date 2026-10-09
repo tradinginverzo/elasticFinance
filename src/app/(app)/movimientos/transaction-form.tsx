@@ -6,6 +6,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { CategorySelect } from "@/components/category-select";
 import { FormError } from "@/components/form-error";
 import { NativeSelect } from "@/components/native-select";
+import { ReceiptThumb } from "@/components/receipt-thumb";
+import { ReceiptUploader, type UploadedReceipt } from "@/components/receipt-uploader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +15,10 @@ import { useFormAction } from "@/hooks/use-form-action";
 import { todayInput } from "@/lib/dates";
 import { UsualDiffNote } from "@/components/usual-diff-badge";
 import { centsToInput, parseAmountToCents } from "@/lib/money";
+import type { ReceiptScan } from "@/lib/receipt-types";
 import { cn } from "@/lib/utils";
 
+import { deleteReceipt } from "../facturas/actions";
 import { TemplatePicker } from "./template-picker";
 
 import {
@@ -65,6 +69,35 @@ export type TemplateOption = {
 
 const initialState: TransactionFormState = { error: null };
 
+// Factura adjunta al crear el movimiento. `fromList`: ya estaba subida (viene de /facturas).
+export type FormReceipt = UploadedReceipt & { fromList?: boolean };
+
+// Campos que se rellenan con lo leído de la factura. Con un gasto fijo elegido (o en una
+// transferencia) solo se toman el monto, la fecha y las notas: el resto ya viene dado.
+type ScanFill = Partial<{
+  type: FlowType;
+  amount: string;
+  date: string;
+  merchant: string;
+  categoryId: string;
+  notes: string;
+}>;
+
+function fillFromScan(scan: ReceiptScan | null, full: boolean): ScanFill | null {
+  if (!scan) return null;
+  const fill: ScanFill = {
+    amount: scan.amount ?? undefined,
+    date: scan.date ?? undefined,
+    notes: scan.notes ?? undefined,
+  };
+  if (full) {
+    fill.type = scan.type;
+    fill.merchant = scan.merchant ?? undefined;
+    fill.categoryId = scan.categoryId ?? undefined;
+  }
+  return fill;
+}
+
 export function TransactionForm({
   transaction,
   accounts,
@@ -72,6 +105,8 @@ export function TransactionForm({
   currency,
   templates = [],
   initialTemplateId = null,
+  initialReceipt = null,
+  receiptReadingEnabled = false,
 }: {
   transaction?: TransactionFormData;
   accounts: { id: string; name: string }[];
@@ -79,6 +114,8 @@ export function TransactionForm({
   currency: string;
   templates?: TemplateOption[];
   initialTemplateId?: string | null;
+  initialReceipt?: FormReceipt | null;
+  receiptReadingEnabled?: boolean;
 }) {
   const { state, onSubmit, pending } = useFormAction(
     saveTransaction.bind(null, transaction?.id ?? null),
@@ -88,12 +125,20 @@ export function TransactionForm({
     transaction?.templateId ?? (templates.some((t) => t.id === initialTemplateId) ? initialTemplateId! : ""),
   );
   const template = transaction ? undefined : templates.find((t) => t.id === templateId);
-  const [type, setType] = useState<TransactionType>(template?.type ?? transaction?.type ?? "EXPENSE");
+  const [receipt, setReceipt] = useState<FormReceipt | null>(initialReceipt);
+  const [scanFill, setScanFill] = useState<ScanFill | null>(() =>
+    fillFromScan(initialReceipt?.scan ?? null, !template),
+  );
+  // Cambia cada vez que llega una factura leída: remonta los campos con los nuevos valores.
+  const [scanVersion, setScanVersion] = useState(0);
+  const [type, setType] = useState<TransactionType>(
+    template?.type ?? scanFill?.type ?? transaction?.type ?? "EXPENSE",
+  );
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Valores iniciales de los campos: los del gasto fijo elegido o los del movimiento que se edita.
   // Al elegir otro gasto fijo, los campos se remontan (key) con estos valores; el monto se puede cambiar.
-  const prefill = template
+  const base = template
     ? {
         type: template.type,
         amount: centsToInput(BigInt(template.amountCents)),
@@ -108,6 +153,14 @@ export function TransactionForm({
         categoryId: transaction?.categoryId ?? null,
         merchant: transaction?.merchant ?? "",
       };
+  const prefill = {
+    ...base,
+    type: scanFill?.type ?? base.type,
+    amount: scanFill?.amount ?? base.amount,
+    categoryId: scanFill?.categoryId ?? base.categoryId,
+    merchant: scanFill?.merchant ?? base.merchant,
+  };
+  const fieldKey = `${templateId}-${scanVersion}`;
 
   // Lo que se va escribiendo en "Monto", para comparar en vivo con el monto habitual.
   const [amountText, setAmountText] = useState(prefill.amount ?? "");
@@ -136,7 +189,8 @@ export function TransactionForm({
     setTemplateId(id);
     const next = templates.find((t) => t.id === id);
     if (next) setType(next.type);
-    setAmountText(next ? centsToInput(BigInt(next.amountCents)) : "");
+    // El monto de la factura (si hay) manda sobre el habitual del gasto fijo.
+    setAmountText(scanFill?.amount ?? (next ? centsToInput(BigInt(next.amountCents)) : ""));
     if (next?.accountId) changeFromAccount(next.accountId);
   }
 
@@ -147,11 +201,31 @@ export function TransactionForm({
   }
   const [deleting, startDelete] = useTransition();
   const dateRef = useRef<HTMLInputElement>(null);
+  const initialScanDate = useRef(scanFill?.date);
 
-  // La fecha por defecto es "hoy" según el reloj del dispositivo (el servidor puede estar en otra zona).
+  // La fecha por defecto es la de la factura o "hoy" según el reloj del dispositivo
+  // (el servidor puede estar en otra zona).
   useEffect(() => {
-    if (!transaction && dateRef.current) dateRef.current.value = todayInput();
+    if (!transaction && dateRef.current) dateRef.current.value = initialScanDate.current ?? todayInput();
   }, [transaction]);
+
+  function handleReceipt(uploaded: UploadedReceipt) {
+    setReceipt(uploaded);
+    const fill = fillFromScan(uploaded.scan, !template && type !== "TRANSFER");
+    if (!fill) return;
+    setScanFill(fill);
+    if (fill.type) setType(fill.type);
+    if (fill.amount) setAmountText(fill.amount);
+    if (fill.date && dateRef.current) dateRef.current.value = fill.date;
+    setScanVersion((v) => v + 1);
+  }
+
+  // Quitar la factura del formulario: si se subió aquí se borra; si venía de /facturas, queda allí.
+  function removeReceipt() {
+    if (!receipt) return;
+    if (!receipt.fromList) void deleteReceipt(receipt.receiptId);
+    setReceipt(null);
+  }
 
   const visibleCategories = categories.filter((c) => c.type === type);
   const toAccounts = accounts.filter((a) => a.id !== fromAccountId);
@@ -169,6 +243,17 @@ export function TransactionForm({
       <form onSubmit={onSubmit} autoComplete="off" className="flex flex-col gap-5">
         <input type="hidden" name="type" value={type} />
         <input type="hidden" name="templateId" value={templateId} />
+        <input type="hidden" name="receiptId" value={receipt?.receiptId ?? ""} />
+
+        {!transaction &&
+          (receipt ? (
+            <ReceiptCard receipt={receipt} onRemove={removeReceipt} />
+          ) : (
+            <ReceiptUploader
+              onUploaded={handleReceipt}
+              label={receiptReadingEnabled ? "Leer una factura (foto o PDF)" : "Adjuntar factura (foto o PDF)"}
+            />
+          ))}
 
         {!transaction &&
           !isTransfer &&
@@ -216,7 +301,7 @@ export function TransactionForm({
         <div className="flex flex-col gap-2">
           <Label htmlFor="amount">Monto ({currency})</Label>
           <Input
-            key={`amount-${templateId}`}
+            key={`amount-${fieldKey}`}
             id="amount"
             name="amount"
             inputMode="decimal"
@@ -299,7 +384,7 @@ export function TransactionForm({
             <Label htmlFor="categoryId">Categoría</Label>
             <CategorySelect
               // Al cambiar entre gasto e ingreso (o de gasto fijo) cambian las opciones: remontamos el select.
-              key={`category-${type}-${templateId}`}
+              key={`category-${type}-${fieldKey}`}
               id="categoryId"
               name="categoryId"
               categories={visibleCategories}
@@ -313,7 +398,7 @@ export function TransactionForm({
             {type === "EXPENSE" ? "Comercio o descripción" : "Descripción"}
           </Label>
           <Input
-            key={`merchant-${templateId}`}
+            key={`merchant-${fieldKey}`}
             id="merchant"
             name="merchant"
             autoComplete="off"
@@ -333,12 +418,13 @@ export function TransactionForm({
         <div className="flex flex-col gap-2">
           <Label htmlFor="notes">Notas</Label>
           <textarea
+            key={`notes-${scanVersion}`}
             id="notes"
             name="notes"
             autoComplete="off"
             rows={2}
             maxLength={500}
-            defaultValue={transaction?.notes ?? ""}
+            defaultValue={scanFill?.notes ?? transaction?.notes ?? ""}
             className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
           />
         </div>
@@ -374,6 +460,28 @@ export function TransactionForm({
           <FormError message={deleteError} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Factura adjunta al formulario, con lo que pasó al leerla.
+function ReceiptCard({ receipt, onRemove }: { receipt: FormReceipt; onRemove: () => void }) {
+  const failed = receipt.readingEnabled && receipt.error;
+  const message = !receipt.readingEnabled
+    ? "Factura adjunta. Escribe los datos del movimiento."
+    : (receipt.error ??
+      `Datos leídos de la factura. Revísalos antes de guardar.${
+        receipt.scan?.itemCount ? ` Después podrás guardar los precios de sus ${receipt.scan.itemCount} productos.` : ""
+      }`);
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-muted/40 p-2">
+      <ReceiptThumb url={receipt.previewUrl} isPdf={receipt.isPdf} className="size-14" />
+      <p className={cn("min-w-0 flex-1 text-sm", failed ? "text-destructive" : "text-muted-foreground")}>
+        {message}
+      </p>
+      <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+        Quitar
+      </Button>
     </div>
   );
 }
