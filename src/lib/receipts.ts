@@ -117,6 +117,8 @@ export type Extracted = {
   merchant: string | null;
   category: string | null;
   summary: string | null;
+  tendered?: number | null; // lo que se entregó para pagar (p. ej. el billete de $20)
+  change?: number | null; // el cambio o vuelto que se recibió
   items?: ExtractedItem[]; // facturas leídas antes del comparador no los tienen
 };
 
@@ -136,7 +138,16 @@ const EXTRACT_SCHEMA = {
     },
     total: {
       type: ["number", "null"],
-      description: "Total pagado, con impuestos y propina. Número con punto decimal, sin separador de miles.",
+      description:
+        "TOTAL de la compra (lo que cuesta), con impuestos y propina. NO es lo que el cliente entregó para pagar (efectivo, «recibido», «pago») ni el cambio o vuelto. Número con punto decimal, sin separador de miles.",
+    },
+    tendered: {
+      type: ["number", "null"],
+      description: "Lo que el cliente entregó para pagar, si aparece (efectivo, «recibido», «pago con»). null si no aparece.",
+    },
+    change: {
+      type: ["number", "null"],
+      description: "Cambio o vuelto devuelto al cliente, si aparece. null si no aparece.",
     },
     currency: { type: ["string", "null"], description: "Código ISO 4217 (USD, EUR…), si se ve." },
     date: { type: ["string", "null"], description: "Fecha de la compra en formato YYYY-MM-DD." },
@@ -189,7 +200,19 @@ const EXTRACT_SCHEMA = {
       },
     },
   },
-  required: ["is_receipt", "type", "total", "currency", "date", "merchant", "category", "summary", "items"],
+  required: [
+    "is_receipt",
+    "type",
+    "total",
+    "tendered",
+    "change",
+    "currency",
+    "date",
+    "merchant",
+    "category",
+    "summary",
+    "items",
+  ],
 };
 
 // Lee la factura con Claude y guarda el resultado. Devuelve un mensaje de error o null.
@@ -258,7 +281,7 @@ export async function readReceipt(receiptId: string): Promise<string | null> {
 
     const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
     if (!text) throw new Error(`La IA no devolvió datos (${response.stop_reason}).`);
-    const extracted = JSON.parse(text) as Extracted;
+    const extracted = fixTotal(JSON.parse(text) as Extracted);
 
     await db.receipt.update({
       where: { id: receiptId },
@@ -270,6 +293,16 @@ export async function readReceipt(receiptId: string): Promise<string | null> {
     console.error("Error leyendo la factura", receiptId, error);
     return fail(receiptId, "No se pudo leer la factura. Escribe los datos a mano.");
   }
+}
+
+// Si la IA tomó como total lo entregado en efectivo ($20) pese a haber cambio ($1,33),
+// el total real es la diferencia ($18,67).
+export function fixTotal(data: Extracted): Extracted {
+  const { total, tendered, change } = data;
+  if (total && tendered && change && change > 0 && Math.abs(total - tendered) < 0.005 && tendered > change) {
+    return { ...data, total: Math.round((tendered - change) * 100) / 100 };
+  }
+  return data;
 }
 
 async function fail(receiptId: string, message: string) {
@@ -288,7 +321,7 @@ export async function toReceiptScan(
   workspaceCurrency: string,
 ): Promise<ReceiptScan | null> {
   if (!extractedData || typeof extractedData !== "object") return null;
-  const data = extractedData as Extracted;
+  const data = fixTotal(extractedData as Extracted);
   const type = data.type === "INCOME" ? "INCOME" : "EXPENSE";
 
   const categories = await getCategories(workspaceId);
