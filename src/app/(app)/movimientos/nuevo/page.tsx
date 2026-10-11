@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/context";
 import { db } from "@/lib/db";
 import { getFormOptions } from "@/lib/form-options";
+import { getAllBranches } from "@/lib/prices";
 import { receiptReadingEnabled, toReceiptScan, toReceiptViews } from "@/lib/receipts";
 import { getTemplateOptions } from "@/lib/templates";
 
@@ -17,9 +18,10 @@ export default async function NewTransactionPage({
 }: PageProps<"/movimientos/nuevo">) {
   const { workspace } = await requireWorkspace();
   const { fijo, factura } = await searchParams;
-  const [{ accounts, categories }, templates, receipt] = await Promise.all([
+  const [{ accounts, categories }, templates, branchSuggestions, receipt] = await Promise.all([
     getFormOptions(workspace.id),
     getTemplateOptions(workspace.id),
+    getAllBranches(workspace.id),
     // Desde "Facturas → Registrar" llega ?factura=<id>: una factura del espacio aún sin movimiento.
     typeof factura === "string" && /^[0-9a-f-]{36}$/i.test(factura)
       ? db.receipt.findFirst({ where: { id: factura, workspaceId: workspace.id, transactionId: null } })
@@ -69,6 +71,7 @@ export default async function NewTransactionPage({
           initialTemplateId={typeof fijo === "string" ? fijo : null}
           initialReceipt={initialReceipt}
           receiptReadingEnabled={receiptReadingEnabled()}
+          branchSuggestions={branchSuggestions}
         />
       )}
     </div>

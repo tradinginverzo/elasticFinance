@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { formatAmount } from "@/lib/money";
 import { formatPercent } from "@/lib/price-compare";
-import { getProductReferences, getStores, toSeenPrice } from "@/lib/prices";
+import { getBranches, getProductReferences, getStores, toSeenPrice } from "@/lib/prices";
 import { formatPack, formatUnitPrice, PRODUCT_UNITS } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +23,10 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
   const product = await db.product.findFirst({ where: { id, workspaceId: workspace.id } });
   if (!product) notFound();
 
-  const [references, stores, history] = await Promise.all([
+  const [references, stores, branches, history] = await Promise.all([
     getProductReferences(workspace.id, [product.id]),
     getStores(workspace.id),
+    getBranches(workspace.id),
     db.priceEntry.findMany({
       where: { productId: product.id },
       include: { store: { select: { name: true } } },
@@ -79,7 +80,7 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {r
-                            ? `${[r.brand, formatPack(r.sizeEach, r.packCount, product.unit)].filter(Boolean).join(" · ")} a ${formatAmount(r.priceCents, currency)} · ${formatDate(new Date(`${r.date}T00:00:00Z`))}`
+                            ? `${[r.brand, formatPack(r.sizeEach, r.packCount, product.unit)].filter(Boolean).join(" · ")} a ${formatAmount(r.priceCents, currency)} · ${formatDate(new Date(`${r.date}T00:00:00Z`))}${r.branch ? ` · ${r.branch}` : ""}`
                             : "Sin precio normal (solo oferta)"}
                         </p>
                       </div>
@@ -99,6 +100,7 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
                           .filter(Boolean)
                           .join(" · ")}{" "}
                         a {formatAmount(s.offer.priceCents, currency)} ({unitPrice(s.offer.unitCents)})
+                        {s.offer.branch ? ` · ${s.offer.branch}` : ""}
                       </p>
                     )}
                   </li>
@@ -119,6 +121,7 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
             unit={product.unit}
             currency={currency}
             stores={stores}
+            branches={branches}
             reference={reference}
           />
         </CardContent>
@@ -135,6 +138,7 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
                       {entry.store.name}
+                      {entry.branch && <span className="font-normal text-muted-foreground"> · {entry.branch}</span>}
                       {entry.onSale && <span className={cn("ml-2 text-xs font-semibold text-income")}>Oferta</span>}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">

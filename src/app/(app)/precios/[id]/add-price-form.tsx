@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { FormError } from "@/components/form-error";
+import { BranchInput } from "@/components/prices/branch-input";
 import { NativeSelect } from "@/components/native-select";
 import { PriceFields } from "@/components/prices/price-fields";
 import { PriceVerdict } from "@/components/prices/price-verdict";
@@ -25,14 +26,17 @@ export function AddPriceForm({
   unit,
   currency,
   stores,
+  branches,
   reference,
 }: {
   productId: string;
   unit: ProductUnit;
   currency: string;
   stores: { id: string; name: string }[];
+  branches: Record<string, string[]>;
   reference: ProductReference;
 }) {
+  const [branch, setBranch] = useState("");
   const [storeChoice, setStoreChoice] = useState(stores[0]?.id ?? NEW_STORE);
   // Tras guardar con un supermercado nuevo, se elige ese (ya viene en `stores`).
   const [createdStore, setCreatedStore] = useState<string | null>(null);
@@ -64,6 +68,7 @@ export function AddPriceForm({
             productId,
             storeId: isNewStore ? "" : storeId,
             newStoreName,
+            branch,
             date: dateRef.current?.value ?? "",
             draft,
           });
@@ -112,6 +117,8 @@ export function AddPriceForm({
           onChange={(e) => setNewStoreName(e.target.value)}
         />
       )}
+
+      <BranchInput value={branch} onChange={setBranch} suggestions={isNewStore ? [] : (branches[storeId] ?? [])} />
 
       <PriceFields draft={draft} onChange={setDraft} unit={unit} currency={currency} idPrefix="manual" />
 

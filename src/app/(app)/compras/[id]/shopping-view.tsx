@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { NativeSelect } from "@/components/native-select";
+import { BranchInput } from "@/components/prices/branch-input";
 import { PriceFields } from "@/components/prices/price-fields";
 import { PriceVerdict } from "@/components/prices/price-verdict";
 import { type PickedProduct, ProductPicker } from "@/components/prices/product-picker";
@@ -24,6 +25,7 @@ import {
   markItem,
   removeItem,
   renameList,
+  setListBranch,
   setListCompleted,
   setListStore,
   uncheckItem,
@@ -53,11 +55,13 @@ export function ShoppingView({
   list,
   items,
   stores,
+  branches,
   products,
   references,
   currency,
 }: {
-  list: { id: string; name: string; storeId: string | null; completed: boolean };
+  list: { id: string; name: string; storeId: string | null; branch: string | null; completed: boolean };
+  branches: Record<string, string[]>;
   items: ListItem[];
   stores: { id: string; name: string }[];
   products: { id: string; name: string; unit: ProductUnit }[];
@@ -69,6 +73,7 @@ export function ShoppingView({
   // Solo mientras se escribe un supermercado nuevo; si no, se muestra el de la lista.
   const [storeChoice, setStoreChoice] = useState<string | null>(null);
   const [newStoreName, setNewStoreName] = useState("");
+  const [branch, setBranch] = useState(list.branch ?? "");
   const money = (cents: number) => formatAmount(cents, currency);
 
   const run = (action: () => Promise<{ error: string | null }>, done?: () => void) =>
@@ -103,7 +108,13 @@ export function ShoppingView({
   function chooseStore(value: string) {
     if (value === NEW_STORE) return setStoreChoice(NEW_STORE);
     setStoreChoice(null);
+    // Otra cadena: la sucursal anterior ya no vale.
+    if (value && value !== list.storeId) setBranch("");
     if (value) run(() => setListStore(list.id, value, ""));
+  }
+
+  function saveBranch() {
+    if (branch.trim() !== (list.branch ?? "")) run(() => setListBranch(list.id, branch));
   }
 
   const openItem = items.find((i) => i.id === openItemId) ?? null;
@@ -137,7 +148,12 @@ export function ShoppingView({
         <Label htmlFor="list-store" className="flex items-center gap-1.5">
           <StoreIcon className="size-4" /> ¿Dónde estás comprando?
         </Label>
-        <NativeSelect id="list-store" value={storeChoice ?? list.storeId ?? ""} onChange={(e) => chooseStore(e.target.value)} disabled={pending}>
+        <NativeSelect
+          id="list-store"
+          value={storeChoice ?? list.storeId ?? ""}
+          onChange={(e) => chooseStore(e.target.value)}
+          disabled={pending}
+        >
           {!list.storeId && <option value="">Elige el supermercado…</option>}
           {stores.map((s) => (
             <option key={s.id} value={s.id}>
@@ -174,6 +190,14 @@ export function ShoppingView({
               Usar
             </Button>
           </form>
+        )}
+        {list.storeId && storeChoice !== NEW_STORE && (
+          <BranchInput
+            value={branch}
+            onChange={setBranch}
+            onBlur={saveBranch}
+            suggestions={branches[list.storeId] ?? []}
+          />
         )}
       </div>
 
@@ -334,7 +358,7 @@ export function ShoppingView({
               key={openItem.id}
               item={openItem}
               storeId={list.storeId}
-              storeName={storeName}
+              storeName={storeName && list.branch ? `${storeName} · ${list.branch}` : storeName}
               reference={references[openItem.productId]}
               currency={currency}
               pending={pending}

@@ -7,7 +7,7 @@ import { requireWorkspace } from "@/lib/context";
 import { parseDateInput, todayInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { type PriceDraft, parseDraft } from "@/lib/price-draft";
-import { findOrCreateStore, resolvePickedProduct } from "@/lib/prices";
+import { cleanBranch, findOrCreateStore, resolvePickedProduct } from "@/lib/prices";
 import type { ProductUnit } from "@/lib/units";
 
 type Result = { error: string | null };
@@ -74,7 +74,8 @@ export async function setListCompleted(listId: string, completed: boolean): Prom
   return { error: null };
 }
 
-// Dónde se está comprando. Los precios ya anotados en esta lista pasan a ese supermercado.
+// Dónde se está comprando. Los precios ya anotados en esta lista pasan a ese supermercado
+// (sin sucursal: la de la cadena anterior ya no vale).
 export async function setListStore(listId: string, storeId: string, newStoreName: string): Promise<Result> {
   const { workspace, list } = await findList(listId);
   if (!list) return { error: "Esa lista no existe." };
@@ -85,12 +86,29 @@ export async function setListStore(listId: string, storeId: string, newStoreName
       : null;
   if (!store) return { error: "Elige el supermercado." };
 
+  const sameStore = store.id === list.storeId;
   await db.$transaction([
-    db.shoppingList.update({ where: { id: list.id }, data: { storeId: store.id } }),
+    db.shoppingList.update({
+      where: { id: list.id },
+      data: { storeId: store.id, ...(sameStore ? {} : { branch: null }) },
+    }),
     db.priceEntry.updateMany({
       where: { shoppingItem: { listId: list.id } },
-      data: { storeId: store.id },
+      data: { storeId: store.id, ...(sameStore ? {} : { branch: null }) },
     }),
+  ]);
+  refresh(list.id);
+  return { error: null };
+}
+
+// Sucursal opcional donde se está comprando; también para los precios ya anotados en la lista.
+export async function setListBranch(listId: string, branch: string): Promise<Result> {
+  const { list } = await findList(listId);
+  if (!list) return { error: "Esa lista no existe." };
+  const clean = cleanBranch(branch);
+  await db.$transaction([
+    db.shoppingList.update({ where: { id: list.id }, data: { branch: clean } }),
+    db.priceEntry.updateMany({ where: { shoppingItem: { listId: list.id } }, data: { branch: clean } }),
   ]);
   refresh(list.id);
   return { error: null };
@@ -142,6 +160,7 @@ export async function markItem(
       priceCents: BigInt(price.priceCents),
       regularPriceCents: price.regularPriceCents === null ? null : BigInt(price.regularPriceCents),
       storeId: item.list.storeId,
+      branch: item.list.branch,
     };
     if (priceEntryId) {
       await db.priceEntry.update({ where: { id: priceEntryId }, data });

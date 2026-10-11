@@ -6,6 +6,7 @@ export type ReceiptScan = {
   amount: string | null; // como en el campo "Monto" ("12,50")
   date: string | null; // "2026-10-04"
   merchant: string | null;
+  branch: string | null; // sucursal, si la factura la dice
   categoryId: string | null;
   notes: string | null;
   itemCount: number; // productos leídos (para el comparador de precios)
@@ -17,6 +18,7 @@ export type ReceiptView = {
   url: string | null;
   mimeType: string;
   status: "UPLOADED" | "PROCESSING" | "PROCESSED" | "CONFIRMED" | "FAILED";
+  priceCount: number; // precios guardados en el comparador desde esta factura
 };
 
 // Tipos de archivo que acepta el bucket "receipts" (ver scripts/setup-storage.mjs).

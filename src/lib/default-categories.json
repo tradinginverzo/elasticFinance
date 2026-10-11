@@ -8,8 +8,15 @@
   { "name": "Ocio", "type": "EXPENSE", "icon": "party-popper" },
   { "name": "Compras", "type": "EXPENSE", "icon": "shopping-bag" },
   { "name": "Educación", "type": "EXPENSE", "icon": "graduation-cap" },
+  { "name": "Trading", "type": "EXPENSE", "icon": "candlestick-chart" },
+  { "name": "IVA", "type": "EXPENSE", "icon": "receipt" },
+  { "name": "Comisión", "type": "EXPENSE", "icon": "percent" },
+  { "name": "Gym", "type": "EXPENSE", "icon": "dumbbell" },
+  { "name": "Inversión", "type": "EXPENSE", "icon": "trending-up" },
   { "name": "Otros gastos", "type": "EXPENSE", "icon": "circle-ellipsis" },
   { "name": "Sueldo", "type": "INCOME", "icon": "briefcase" },
   { "name": "Ingreso extra", "type": "INCOME", "icon": "sparkles" },
+  { "name": "Trading", "type": "INCOME", "icon": "candlestick-chart" },
+  { "name": "Inversión", "type": "INCOME", "icon": "trending-up" },
   { "name": "Otros ingresos", "type": "INCOME", "icon": "circle-ellipsis" }
 ]

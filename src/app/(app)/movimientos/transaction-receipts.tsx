@@ -1,15 +1,14 @@
 "use client";
 
-import { Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
+import { DeleteReceiptButton } from "@/components/delete-receipt-button";
 import { ReceiptThumb } from "@/components/receipt-thumb";
 import { ReceiptUploader } from "@/components/receipt-uploader";
-import { Button } from "@/components/ui/button";
 import type { ReceiptView } from "@/lib/receipt-types";
 
-import { attachReceipt, deleteReceipt } from "../facturas/actions";
+import { attachReceipt } from "../facturas/actions";
 
 // Facturas de un movimiento ya guardado: verlas, borrarlas o adjuntar otra.
 export function TransactionReceipts({
@@ -21,16 +20,6 @@ export function TransactionReceipts({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  function remove(id: string) {
-    if (!confirm("¿Borrar esta factura? El movimiento no se borra.")) return;
-    startTransition(async () => {
-      const result = await deleteReceipt(id);
-      setError(result.error);
-      router.refresh();
-    });
-  }
 
   return (
     <section className="flex flex-col gap-3 border-t pt-6">
@@ -40,17 +29,11 @@ export function TransactionReceipts({
           {receipts.map((r) => (
             <li key={r.id} className="relative">
               <ReceiptThumb url={r.url} isPdf={r.mimeType === "application/pdf"} className="size-20" />
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon-xs"
-                aria-label="Borrar factura"
-                className="absolute -top-2 -right-2 rounded-full shadow"
-                disabled={pending}
-                onClick={() => remove(r.id)}
-              >
-                <Trash2Icon />
-              </Button>
+              <DeleteReceiptButton
+                receiptId={r.id}
+                priceCount={r.priceCount}
+                className="absolute -top-2 -right-2 size-6 rounded-full bg-secondary shadow"
+              />
             </li>
           ))}
         </ul>

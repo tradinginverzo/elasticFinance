@@ -7,6 +7,7 @@ import type { ProductUnit } from "@/lib/units";
 export type SeenPrice = {
   storeId: string;
   storeName: string;
+  branch: string | null; // sucursal, si se anotó
   brand: string | null;
   sizeEach: number;
   packCount: number;

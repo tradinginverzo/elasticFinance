@@ -7,6 +7,7 @@ import { isMemberOf, requireWorkspace } from "@/lib/context";
 import { parseDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { parseAmountToCents } from "@/lib/money";
+import { cleanBranch } from "@/lib/prices";
 
 export type TransactionFormState = { error: string | null };
 
@@ -20,6 +21,7 @@ const transactionSchema = z.object({
   // Las transferencias no envían categoría (el campo no se muestra).
   categoryId: z.union([z.uuid(), z.literal("")]).default(""),
   merchant: z.string().trim().max(100),
+  branch: z.string().trim().max(60).default(""), // sucursal opcional
   notes: z.string().trim().max(500),
   templateId: z.union([z.uuid(), z.literal("")]).default(""),
   // Factura subida en el formulario (solo al crear).
@@ -89,6 +91,7 @@ export async function saveTransaction(
     toAccountId: toAccount?.id ?? null,
     categoryId: category?.id ?? null,
     merchant: input.merchant || null,
+    branch: isTransfer ? null : cleanBranch(input.branch),
     notes: input.notes || null,
     templateId: template?.id ?? null,
     // Monto habitual en el momento de registrarlo. Al editar un movimiento del mismo gasto fijo

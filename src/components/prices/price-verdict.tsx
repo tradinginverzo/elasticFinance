@@ -60,7 +60,8 @@ export function PriceVerdict({
         </p>
         {!compact && (
           <p className="mt-0.5 text-muted-foreground">
-            Frente a {other.storeName}: {otherDesc}. {lastNote}
+            Frente a {other.storeName}
+            {other.branch ? ` (${other.branch})` : ""}: {otherDesc}. {lastNote}
           </p>
         )}
       </div>
@@ -77,7 +78,7 @@ export function PriceVerdict({
       </p>
       {!compact && (
         <p className="mt-0.5 text-muted-foreground">
-          Allí: {otherDesc} ({other.date.split("-").reverse().slice(0, 2).join("/")}). {lastNote}
+          Allí{other.branch ? ` (${other.branch})` : ""}: {otherDesc} ({other.date.split("-").reverse().slice(0, 2).join("/")}). {lastNote}
         </p>
       )}
     </div>

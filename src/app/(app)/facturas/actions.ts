@@ -6,7 +6,7 @@ import { isMemberOf, requireWorkspace } from "@/lib/context";
 import { parseDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { type PriceDraft, parseDraft } from "@/lib/price-draft";
-import { aliasText, findOrCreateProduct, findOrCreateStore } from "@/lib/prices";
+import { aliasText, cleanBranch, findOrCreateProduct, findOrCreateStore } from "@/lib/prices";
 import type { ReceiptScan } from "@/lib/receipt-types";
 import {
   deleteReceiptFiles,
@@ -65,11 +65,16 @@ export async function attachReceipt(receiptId: string, transactionId: string): P
   return { error: null };
 }
 
-// Borra la factura y su archivo. El movimiento (si lo tiene) no se toca.
-export async function deleteReceipt(receiptId: string): Promise<{ error: string | null }> {
+// Borra la factura y su archivo. El movimiento (si lo tiene) y los productos no se tocan.
+// Con `deletePrices`, también los precios que se guardaron desde ESTA factura.
+export async function deleteReceipt(receiptId: string, deletePrices = false): Promise<{ error: string | null }> {
   const receipt = await findOwnReceipt(receiptId);
   if (!receipt) return { error: "Esa factura no existe." };
-  await db.receipt.delete({ where: { id: receipt.id } });
+  await db.$transaction([
+    ...(deletePrices ? [db.priceEntry.deleteMany({ where: { receiptId: receipt.id } })] : []),
+    db.receipt.delete({ where: { id: receipt.id } }),
+  ]);
+  if (deletePrices) revalidatePath("/precios", "layout");
   await deleteReceiptFiles([receipt.storagePath]);
   if (receipt.transactionId) revalidatePath(`/movimientos/${receipt.transactionId}`);
   revalidatePath("/facturas");
@@ -89,7 +94,7 @@ export type ReceiptItemInput = {
 // vez anterior) y recuerda cómo se escribe cada producto en las facturas.
 export async function saveReceiptItems(
   receiptId: string,
-  input: { storeId: string; newStoreName: string; date: string; items: ReceiptItemInput[] },
+  input: { storeId: string; newStoreName: string; branch: string; date: string; items: ReceiptItemInput[] },
 ): Promise<{ error: string | null }> {
   const { profile, workspace } = await requireWorkspace();
   const receipt = await db.receipt.findFirst({ where: { id: receiptId, workspaceId: workspace.id } });
@@ -123,7 +128,7 @@ export async function saveReceiptItems(
   }
 
   const entries = [];
-  const aliases = new Map<string, string>();
+  const aliases = new Map<string, { productId: string; brand: string | null; sizeEach: number; packCount: number }>();
   for (const { item, product, unit, price } of rows) {
     const target = product ?? (await findOrCreateProduct(workspace.id, item.newName.slice(0, 60), unit));
     entries.push({
@@ -133,23 +138,32 @@ export async function saveReceiptItems(
       workspaceId: workspace.id,
       productId: target.id,
       storeId: store.id,
+      branch: cleanBranch(input.branch),
       createdById: profile.id,
       source: "RECEIPT" as const,
       receiptId: receipt.id,
       description: item.text.slice(0, 200) || null,
       date,
     });
-    if (item.text.trim()) aliases.set(aliasText(item.text), target.id);
+    // Se recuerda también la marca y la medida: la próxima factura igual vendrá rellenada.
+    if (item.text.trim()) {
+      aliases.set(aliasText(item.text), {
+        productId: target.id,
+        brand: price.brand,
+        sizeEach: price.sizeEach,
+        packCount: price.packCount,
+      });
+    }
   }
 
   await db.$transaction([
     db.priceEntry.deleteMany({ where: { receiptId: receipt.id } }),
     db.priceEntry.createMany({ data: entries }),
-    ...[...aliases].map(([text, productId]) =>
+    ...[...aliases].map(([text, alias]) =>
       db.productAlias.upsert({
         where: { workspaceId_text: { workspaceId: workspace.id, text } },
-        create: { workspaceId: workspace.id, text, productId },
-        update: { productId },
+        create: { workspaceId: workspace.id, text, ...alias },
+        update: alias,
       }),
     ),
     db.receipt.update({ where: { id: receipt.id }, data: { itemsSavedAt: new Date() } }),

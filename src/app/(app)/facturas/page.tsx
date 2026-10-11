@@ -11,7 +11,9 @@ import { formatCents } from "@/lib/money";
 import { receiptReadingEnabled, toReceiptViews } from "@/lib/receipts";
 import { cn } from "@/lib/utils";
 
-import { DeleteReceiptButton, UploadReceipt } from "./receipt-actions";
+import { DeleteReceiptButton } from "@/components/delete-receipt-button";
+
+import { UploadReceipt } from "./receipt-actions";
 
 export const metadata = { title: "Facturas" };
 
@@ -20,6 +22,7 @@ export default async function ReceiptsPage() {
   const receipts = await db.receipt.findMany({
     where: { workspaceId: workspace.id },
     include: {
+      _count: { select: { priceEntries: true } },
       transaction: { select: { id: true, type: true, merchant: true, amountCents: true, currency: true, date: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -114,17 +117,15 @@ export default async function ReceiptsPage() {
                       Ver
                     </Button>
                   ) : (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        render={<Link href={`/movimientos/nuevo?factura=${r.id}`} />}
-                        nativeButton={false}
-                      >
-                        Registrar
-                      </Button>
-                      <DeleteReceiptButton receiptId={r.id} />
-                    </div>
+                    <Button
+                      size="sm"
+                      render={<Link href={`/movimientos/nuevo?factura=${r.id}`} />}
+                      nativeButton={false}
+                    >
+                      Registrar
+                    </Button>
                   )}
+                  <DeleteReceiptButton receiptId={r.id} priceCount={r._count.priceEntries} />
                 </div>
               </li>
             );

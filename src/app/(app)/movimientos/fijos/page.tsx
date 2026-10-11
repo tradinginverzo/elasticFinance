@@ -12,14 +12,28 @@ import { formatCents } from "@/lib/money";
 import { getTemplatesWithStatus } from "@/lib/templates";
 import { cn } from "@/lib/utils";
 
+import { StateFilter } from "./state-filter";
+import { type State, STATES } from "./states";
+
 export const metadata = { title: "Gastos fijos" };
 
-export default async function TemplatesPage() {
+export default async function TemplatesPage({ searchParams }: PageProps<"/movimientos/fijos">) {
   const { workspace } = await requireWorkspace();
+  const { estado } = await searchParams;
+  const state: State = STATES.some((s) => s.value === estado) ? (estado as State) : "todos";
   const templates = await getTemplatesWithStatus(workspace.id);
 
   const expenses = templates.filter((t) => t.type === "EXPENSE");
   const incomes = templates.filter((t) => t.type === "INCOME");
+  const isPaid = (t: (typeof templates)[number]) => t.thisMonth.length > 0;
+  const counts: Record<State, number> = {
+    todos: templates.length,
+    "por-pagar": templates.filter((t) => !isPaid(t)).length,
+    pagados: templates.filter(isPaid).length,
+  };
+  // Lo que falta pagar este mes (gastos fijos sin registrar, por su monto habitual).
+  const pendingExpenseCents = expenses.filter((t) => !isPaid(t)).reduce((s, t) => s + t.amountCents, BigInt(0));
+
   const monthlyFixed = expenses.reduce((s, t) => s + t.amountCents, BigInt(0));
   const monthlyFixedIncome = incomes.reduce((s, t) => s + t.amountCents, BigInt(0));
   const pending = templates.filter((t) => t.thisMonth.length === 0).length;
@@ -129,8 +143,30 @@ export default async function TemplatesPage() {
             </CardContent>
           </Card>
 
-          <TemplateGroup title="Gastos" templates={expenses} currency={workspace.currency} />
-          <TemplateGroup title="Ingresos" templates={incomes} currency={workspace.currency} />
+          {/* Filtro instantáneo: oculta filas con CSS según la pestaña (ver state-filter.tsx). */}
+          <StateFilter initial={state} counts={counts}>
+            {pendingExpenseCents > BigInt(0) && (
+              <p className="-mt-4 hidden px-1 text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
+                Te falta pagar{" "}
+                <span className="font-semibold text-expense tabular-nums">
+                  {formatCents(pendingExpenseCents, workspace.currency)}
+                </span>{" "}
+                en {formatMonth(currentMonth())}.
+              </p>
+            )}
+            <TemplateGroup title="Gastos" templates={expenses} currency={workspace.currency} />
+            <TemplateGroup title="Ingresos" templates={incomes} currency={workspace.currency} />
+            {counts["por-pagar"] === 0 && (
+              <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
+                ¡Todo pagado este mes! 🎉
+              </p>
+            )}
+            {counts.pagados === 0 && (
+              <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=pagados]/fijos:block">
+                Todavía no has pagado ninguno este mes.
+              </p>
+            )}
+          </StateFilter>
         </>
       )}
     </div>
@@ -147,14 +183,30 @@ function TemplateGroup({
   currency: string;
 }) {
   if (templates.length === 0) return null;
+  const paid = templates.filter((t) => t.thisMonth.length > 0).length;
   return (
-    <section className="flex flex-col gap-2">
+    <section
+      className={cn(
+        "flex flex-col gap-2",
+        // Sin filas para esa pestaña: fuera también el título.
+        paid === 0 && "group-data-[estado=pagados]/fijos:hidden",
+        paid === templates.length && "group-data-[estado=por-pagar]/fijos:hidden",
+      )}
+    >
       <h2 className="px-1 text-xs font-medium text-muted-foreground">{title}</h2>
       <ul className="divide-y overflow-hidden rounded-xl border bg-card">
         {templates.map((t) => {
           const registered = t.thisMonth[0];
           return (
-            <li key={t.id} className="flex items-center gap-3 px-4 py-3">
+            <li
+              key={t.id}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                registered
+                  ? "group-data-[estado=por-pagar]/fijos:hidden"
+                  : "group-data-[estado=pagados]/fijos:hidden",
+              )}
+            >
               <CategoryBadge
                 name={t.category?.name ?? null}
                 color={t.category?.color ?? null}
