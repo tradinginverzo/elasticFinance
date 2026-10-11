@@ -95,7 +95,10 @@ export function MovementFilters({
             <button
               key={chip.key}
               type="button"
-              onClick={() => apply({ ...filters, ...chip.clear })}
+              onClick={() => {
+                if (chip.key === "q") setQ("");
+                apply({ ...filters, ...chip.clear });
+              }}
               className="flex items-center gap-1 rounded-full border bg-muted/60 py-1 pr-1.5 pl-2.5 text-xs hover:bg-muted"
               aria-label={`Quitar filtro: ${chip.label}`}
             >

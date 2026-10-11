@@ -135,8 +135,9 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
       </div>
 
       <MovementFilters
-        // Se remonta al cambiar los filtros desde fuera (etiquetas, meses): el buscador toma el valor nuevo.
-        key={filtersToParams(filters).toString()}
+        // Se remonta solo si cambian los otros filtros, NUNCA al buscar: si no, el campo pierde el
+        // foco mientras escribes (y en el iPhone se cierra el teclado).
+        key={filtersToParams({ ...filters, q: "" }).toString()}
         filters={filters}
         month={month}
         accounts={accounts}
