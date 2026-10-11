@@ -12,6 +12,7 @@ import { formatCents } from "@/lib/money";
 import { getTemplatesWithStatus } from "@/lib/templates";
 import { cn } from "@/lib/utils";
 
+import { SelectionProvider, SelectToggle } from "./selection";
 import { StateFilter } from "./state-filter";
 import { type State, STATES } from "./states";
 
@@ -144,29 +145,31 @@ export default async function TemplatesPage({ searchParams }: PageProps<"/movimi
           </Card>
 
           {/* Filtro instantáneo: oculta filas con CSS según la pestaña (ver state-filter.tsx). */}
-          <StateFilter initial={state} counts={counts}>
-            {pendingExpenseCents > BigInt(0) && (
-              <p className="-mt-4 hidden px-1 text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
-                Te falta pagar{" "}
-                <span className="font-semibold text-expense tabular-nums">
-                  {formatCents(pendingExpenseCents, workspace.currency)}
-                </span>{" "}
-                en {formatMonth(currentMonth())}.
-              </p>
-            )}
-            <TemplateGroup title="Gastos" templates={expenses} currency={workspace.currency} />
-            <TemplateGroup title="Ingresos" templates={incomes} currency={workspace.currency} />
-            {counts["por-pagar"] === 0 && (
-              <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
-                ¡Todo pagado este mes! 🎉
-              </p>
-            )}
-            {counts.pagados === 0 && (
-              <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=pagados]/fijos:block">
-                Todavía no has pagado ninguno este mes.
-              </p>
-            )}
-          </StateFilter>
+          <SelectionProvider currency={workspace.currency}>
+            <StateFilter initial={state} counts={counts}>
+              {pendingExpenseCents > BigInt(0) && (
+                <p className="-mt-4 hidden px-1 text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
+                  Te falta pagar{" "}
+                  <span className="font-semibold text-expense tabular-nums">
+                    {formatCents(pendingExpenseCents, workspace.currency)}
+                  </span>{" "}
+                  en {formatMonth(currentMonth())}. Marca los que vas a pagar para ver cuánto suman.
+                </p>
+              )}
+              <TemplateGroup title="Gastos" templates={expenses} currency={workspace.currency} />
+              <TemplateGroup title="Ingresos" templates={incomes} currency={workspace.currency} />
+              {counts["por-pagar"] === 0 && (
+                <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
+                  ¡Todo pagado este mes! 🎉
+                </p>
+              )}
+              {counts.pagados === 0 && (
+                <p className="hidden py-6 text-center text-sm text-muted-foreground group-data-[estado=pagados]/fijos:block">
+                  Todavía no has pagado ninguno este mes.
+                </p>
+              )}
+            </StateFilter>
+          </SelectionProvider>
         </>
       )}
     </div>
@@ -207,6 +210,10 @@ function TemplateGroup({
                   : "group-data-[estado=pagados]/fijos:hidden",
               )}
             >
+              {/* Gastos por pagar: casilla para sumar cuánto saldría pagar varios. */}
+              {!registered && t.type === "EXPENSE" && (
+                <SelectToggle id={t.id} amountCents={Number(t.amountCents)} name={t.name} />
+              )}
               <CategoryBadge
                 name={t.category?.name ?? null}
                 color={t.category?.color ?? null}

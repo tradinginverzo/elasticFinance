@@ -11,7 +11,7 @@ import {
   TagIcon,
   WalletIcon,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -75,16 +75,16 @@ export function MobileNav() {
         <Link
           href="/movimientos/nuevo"
           aria-label="Nuevo movimiento"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md active:scale-95"
+          className="mx-auto flex size-12 touch-manipulation items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md active:scale-95"
         >
-          <PlusIcon className="size-6" />
+          <PendingIcon icon={PlusIcon} className="size-6" />
         </Link>
         <MobileLink {...shopping} active={isActive(pathname, shopping.href)} />
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
           className={cn(
-            "flex flex-col items-center gap-0.5 text-[11px] text-muted-foreground",
+            "flex h-full w-full touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground active:bg-muted/60",
             moreActive && "text-primary",
           )}
         >
@@ -105,11 +105,11 @@ export function MobileNav() {
                 href={href}
                 onClick={() => setMoreOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium hover:bg-muted",
+                  "flex touch-manipulation items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium hover:bg-muted active:bg-muted",
                   isActive(pathname, href) && "border-primary/40 bg-primary/5 text-primary",
                 )}
               >
-                <Icon className="size-5" />
+                <PendingIcon icon={Icon} className="size-5" />
                 {label}
               </Link>
             ))}
@@ -127,15 +127,22 @@ function MobileLink({
   active,
 }: (typeof LINKS)[number] & { active: boolean }) {
   return (
+    // Toda la celda responde al toque (no solo el ícono y el texto).
     <Link
       href={href}
       className={cn(
-        "flex flex-col items-center gap-0.5 text-[11px] text-muted-foreground",
+        "flex h-full w-full touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground active:bg-muted/60",
         active && "text-primary",
       )}
     >
-      <Icon className="size-5" />
+      <PendingIcon icon={Icon} className="size-5" />
       {label}
     </Link>
   );
+}
+
+// Ícono que late mientras carga la página del enlace tocado (aviso de que el toque sí entró).
+function PendingIcon({ icon: Icon, className }: { icon: React.ComponentType<{ className?: string }>; className?: string }) {
+  const { pending } = useLinkStatus();
+  return <Icon className={cn(className, pending && "animate-pulse opacity-60")} />;
 }
