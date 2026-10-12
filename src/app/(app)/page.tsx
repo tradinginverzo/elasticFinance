@@ -153,6 +153,7 @@ export default async function DashboardPage() {
             accounts={accounts.map((a) => ({
               id: a.id,
               name: a.name,
+              type: a.type,
               balanceCents: Number(a.balanceCents),
               currency: a.currency,
             }))}
