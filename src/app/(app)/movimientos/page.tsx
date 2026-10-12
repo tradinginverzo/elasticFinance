@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 
 import { FixedComparison } from "@/components/fixed-comparison";
+import type { ChartSlice } from "@/components/share-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Prisma } from "@/generated/prisma/client";
@@ -16,14 +17,18 @@ import { requireWorkspace } from "@/lib/context";
 import { currentMonth, formatDate, formatMonth, monthRange, parseDateInput, shiftMonth } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { getFormOptions } from "@/lib/form-options";
-import { formatCents, parseAmountToCents } from "@/lib/money";
+import { FALLBACK_CATEGORY_COLOR } from "@/lib/category-colors";
+import { formatAmount, formatCents, parseAmountToCents } from "@/lib/money";
 
+import { CategoryCharts } from "./category-charts";
 import { type Filters, filtersToParams, hasAnyFilter, parseFilters } from "./filters";
 import { MovementFilters } from "./movement-filters";
 import { TransactionList, transactionListInclude } from "./transaction-list";
 
-// Como mucho se muestran estos movimientos (un rango de fechas largo podría traer miles).
+// Sin filtros se ve un mes por página (como mucho estos movimientos, por seguridad).
 const MAX_RESULTS = 500;
+// Con filtros se pagina de 25 en 25 (dentro del mes que se ve, o del rango de fechas elegido).
+const PAGE_SIZE = 25;
 
 const ORDER_BY: Record<Filters["orden"], Prisma.TransactionOrderByWithRelationInput[]> = {
   fecha_desc: [{ date: "desc" }, { createdAt: "desc" }],
@@ -32,11 +37,49 @@ const ORDER_BY: Record<Filters["orden"], Prisma.TransactionOrderByWithRelationIn
   monto_asc: [{ amountCents: "asc" }, { date: "desc" }],
 };
 
+// En las tortas por categoría, las 7 más grandes van solas y el resto se junta en "Otras".
+const MAX_SLICES = 8;
+
+// Movimientos de un tipo → porciones por categoría (con el color de cada categoría, el mismo
+// de su insignia en toda la app), de mayor a menor.
+function byCategory(
+  transactions: { type: string; amountCents: bigint; category: { name: string; color: string | null } | null }[],
+  type: "EXPENSE" | "INCOME",
+  currency: string,
+): ChartSlice[] {
+  const groups = new Map<string, ChartSlice>();
+  for (const t of transactions) {
+    if (t.type !== type) continue;
+    const key = t.category?.name ?? "";
+    const group = groups.get(key) ?? {
+      key: key || "sin-categoria",
+      label: key || "Sin categoría",
+      value: 0,
+      color: t.category ? (t.category.color ?? FALLBACK_CATEGORY_COLOR) : FALLBACK_CATEGORY_COLOR,
+    };
+    group.value += Number(t.amountCents);
+    groups.set(key, group);
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.value - a.value);
+  if (sorted.length <= MAX_SLICES) return sorted;
+  const rest = sorted.slice(MAX_SLICES - 1);
+  return [
+    ...sorted.slice(0, MAX_SLICES - 1),
+    {
+      key: "otras",
+      label: `Otras (${rest.length})`,
+      value: rest.reduce((s, x) => s + x.value, 0),
+      color: "var(--muted-foreground)",
+      detail: rest.map((x) => `${x.label} ${formatAmount(x.value, currency)}`).join(", "),
+    },
+  ];
+}
+
 // Filtros → condiciones de la consulta.
 function buildWhere(
   workspaceId: string,
   f: Filters,
-  monthDates: { start: Date; end: Date },
+  monthDates: { start: Date; end: Date }, // el mes que se ve (si no se eligieron fechas)
 ): Prisma.TransactionWhereInput {
   const and: Prisma.TransactionWhereInput[] = [];
   const desde = f.desde ? parseDateInput(f.desde) : null;
@@ -83,22 +126,53 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
   const filtered = hasAnyFilter(filters);
   const hasRange = Boolean(filters.desde || filters.hasta);
 
+  // El mes que se ve (o el rango de fechas elegido en los filtros). Con filtros, paginado.
+  const where = buildWhere(workspace.id, filters, monthRange(month));
+
   // getFormOptions asegura además los colores de las insignias de categoría.
-  const { accounts, categories } = await getFormOptions(workspace.id);
+  // Totales y tortas se calculan sobre TODOS los resultados, no solo la página que se ve.
+  const [{ accounts, categories }, count, totals, categoryTotals] = await Promise.all([
+    getFormOptions(workspace.id),
+    db.transaction.count({ where }),
+    db.transaction.groupBy({ by: ["type"], where, _sum: { amountCents: true } }),
+    db.transaction.groupBy({
+      by: ["type", "categoryId"],
+      where: { AND: [where, { type: { not: "TRANSFER" } }] },
+      _sum: { amountCents: true },
+    }),
+  ]);
+  const totalPages = filtered ? Math.max(1, Math.ceil(count / PAGE_SIZE)) : 1;
+  const requestedPage = Number(typeof params.pagina === "string" ? params.pagina : 1);
+  const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
   const transactions = await db.transaction.findMany({
-    where: buildWhere(workspace.id, filters, monthRange(month)),
+    where,
     include: transactionListInclude,
     orderBy: ORDER_BY[filters.orden],
-    take: MAX_RESULTS,
+    skip: filtered ? (page - 1) * PAGE_SIZE : 0,
+    take: filtered ? PAGE_SIZE : MAX_RESULTS,
   });
+
   const monthHref = (m: string) => `/movimientos?${filtersToParams(filters, m).toString()}`;
+  const pageHref = (p: number) => {
+    const query = filtersToParams(filters, month);
+    if (p > 1) query.set("pagina", String(p));
+    return `/movimientos?${query.toString()}`;
+  };
   const day = (d: string) => formatDate(new Date(`${d}T00:00:00Z`), { day: "numeric", month: "short", year: "numeric" });
 
-  const sum = (type: "INCOME" | "EXPENSE") =>
-    transactions.filter((t) => t.type === type).reduce((s, t) => s + t.amountCents, BigInt(0));
+  const sum = (type: "INCOME" | "EXPENSE") => totals.find((t) => t.type === type)?._sum.amountCents ?? BigInt(0);
   const income = sum("INCOME");
   const expense = sum("EXPENSE");
   const isCurrentMonth = month === currentMonth();
+  // Totales por categoría con su nombre y color (para las tortas).
+  const categoryRows = categoryTotals.map((row) => {
+    const category = categories.find((c) => c.id === row.categoryId);
+    return {
+      type: row.type,
+      amountCents: row._sum.amountCents ?? BigInt(0),
+      category: category ? { name: category.name, color: category.color } : null,
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -195,13 +269,17 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
         />
       )}
 
-      {filtered && transactions.length > 0 && (
+      <CategoryCharts
+        expenses={byCategory(categoryRows, "EXPENSE", workspace.currency)}
+        incomes={byCategory(categoryRows, "INCOME", workspace.currency)}
+        currency={workspace.currency}
+      />
+
+      {filtered && count > 0 && (
         <p className="-mt-3 text-sm text-muted-foreground">
-          {transactions.length === MAX_RESULTS
-            ? `Se muestran los primeros ${MAX_RESULTS} movimientos. Ajusta los filtros para ver menos.`
-            : transactions.length === 1
-              ? "1 movimiento"
-              : `${transactions.length} movimientos`}
+          {count === 1 ? "1 movimiento" : `${count} movimientos`}
+          {totalPages > 1 &&
+            ` · del ${(page - 1) * PAGE_SIZE + 1} al ${Math.min(page * PAGE_SIZE, count)} (página ${page} de ${totalPages})`}
         </p>
       )}
 
@@ -235,6 +313,37 @@ export default async function TransactionsPage({ searchParams }: PageProps<"/mov
           // Ordenados por monto, agrupar por día no tiene sentido: lista corrida con la fecha en cada fila.
           groupByDay={filters.orden.startsWith("fecha")}
         />
+      )}
+
+      {/* Páginas de 25 (solo con filtros; sin filtros se pasa de mes con las flechas de arriba). */}
+      {totalPages > 1 && (
+        <nav aria-label="Páginas" className="flex items-center justify-between gap-2">
+          {page > 1 ? (
+            <Button variant="outline" className="h-10" render={<Link href={pageHref(page - 1)} />} nativeButton={false}>
+              <ChevronLeftIcon />
+              Anterior
+            </Button>
+          ) : (
+            <Button variant="outline" className="h-10" disabled>
+              <ChevronLeftIcon />
+              Anterior
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {page} de {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Button variant="outline" className="h-10" render={<Link href={pageHref(page + 1)} />} nativeButton={false}>
+              Siguiente
+              <ChevronRightIcon />
+            </Button>
+          ) : (
+            <Button variant="outline" className="h-10" disabled>
+              Siguiente
+              <ChevronRightIcon />
+            </Button>
+          )}
+        </nav>
       )}
     </div>
   );

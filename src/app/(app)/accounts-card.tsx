@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { Donut, type DonutSlice } from "@/components/donut";
 import { Segmented } from "@/components/segmented";
+import { type ChartSlice, ShareChart } from "@/components/share-chart";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -23,9 +23,6 @@ const TYPE_GROUPS: { type: AccountType; label: string }[] = [
 // saldo, las 7 de MÁS saldo tienen porción propia y el resto se agrupa en "Otras".
 const COLORS = 8;
 const OTHER_COLOR = "var(--muted-foreground)";
-
-const percent = (value: number, total: number) =>
-  new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 1 }).format(total ? value / total : 0);
 
 // Cuentas del inicio: en lista o en gráfico de torta (cómo se reparte el dinero entre cuentas).
 export function AccountsCard({ accounts, currency }: { accounts: AccountRow[]; currency: string }) {
@@ -166,90 +163,5 @@ function AccountsChart({ accounts, currency }: { accounts: AccountRow[]; currenc
         </p>
       )}
     </ShareChart>
-  );
-}
-
-type ChartSlice = DonutSlice & { detail?: string }; // detail: qué cuentas incluye la porción
-
-// Torta + leyenda (color, nombre, monto, %). Tocar una porción o una fila la muestra en el centro.
-function ShareChart({
-  slices,
-  currency,
-  title,
-  empty,
-  children,
-}: {
-  slices: ChartSlice[];
-  currency: string;
-  title: string;
-  empty: string;
-  children?: React.ReactNode; // notas debajo (lo que no entra en la torta)
-}) {
-  const [active, setActive] = useState<string | null>(null);
-  const total = slices.reduce((s, x) => s + x.value, 0);
-  const activeSlice = slices.find((s) => s.key === active);
-
-  if (slices.length === 0) {
-    return (
-      <div className="flex flex-col gap-3 border-t px-4 py-6">
-        <p className="text-center text-sm text-muted-foreground">{empty}</p>
-        {children}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4 border-t px-4 py-4">
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
-        <Donut
-          slices={slices}
-          activeKey={active}
-          onActiveChange={setActive}
-          label={`${title}: ${slices.map((s) => `${s.label} ${percent(s.value, total)}`).join(", ")}`}
-        >
-          {activeSlice ? (
-            <>
-              <span className="max-w-24 truncate text-xs text-muted-foreground">{activeSlice.label}</span>
-              <span className="text-sm font-semibold">{formatAmount(activeSlice.value, currency)}</span>
-              <span className="text-xs text-muted-foreground">{percent(activeSlice.value, total)}</span>
-            </>
-          ) : (
-            <>
-              <span className="text-xs text-muted-foreground">Con saldo</span>
-              <span className="text-sm font-semibold">{formatAmount(total, currency)}</span>
-            </>
-          )}
-        </Donut>
-
-        {/* Leyenda con nombre, monto y %: identifica cada porción sin depender del color. */}
-        <ul className="flex w-full min-w-0 flex-1 flex-col gap-1">
-          {slices.map((s) => (
-            <li key={s.key}>
-              <button
-                type="button"
-                onPointerEnter={() => setActive(s.key)}
-                onPointerLeave={() => setActive(null)}
-                onClick={() => setActive(active === s.key ? null : s.key)}
-                className={cn(
-                  "flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted",
-                  active === s.key && "bg-muted",
-                )}
-              >
-                <span className="mt-1 size-3 shrink-0 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{s.label}</span>
-                  {s.detail && <span className="block text-xs text-muted-foreground">{s.detail}</span>}
-                </span>
-                <span className="font-medium tabular-nums">{formatAmount(s.value, currency)}</span>
-                <span className="w-12 text-right text-xs text-muted-foreground tabular-nums">
-                  {percent(s.value, total)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {children}
-    </div>
   );
 }
