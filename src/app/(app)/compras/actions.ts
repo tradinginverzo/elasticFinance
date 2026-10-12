@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requireWorkspace } from "@/lib/context";
 import { parseDateInput, todayInput } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { parseAmountToCents } from "@/lib/money";
 import { type PriceDraft, parseDraft } from "@/lib/price-draft";
 import { cleanBranch, findOrCreateStore, resolvePickedProduct } from "@/lib/prices";
 import type { ProductUnit } from "@/lib/units";
@@ -200,5 +201,39 @@ export async function uncheckItem(itemId: string): Promise<Result> {
     ...(item.priceEntryId ? [db.priceEntry.delete({ where: { id: item.priceEntryId } })] : []),
   ]);
   refresh(item.listId);
+  return { error: null };
+}
+
+// Planificar (antes de ir al súper): cantidad, nota y lo que calculas que costará cada paquete.
+// estimate "" = sin estimado propio (se usa el último precio visto, si lo hay).
+export async function planItem(
+  itemId: string,
+  input: { quantity: number; note: string; estimate: string },
+): Promise<Result> {
+  const { item } = await findItem(itemId);
+  if (!item) return { error: "Ese producto ya no está en la lista." };
+  const quantity = Math.round(input.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) return { error: "La cantidad no es válida." };
+  let estimateCents: bigint | null = null;
+  if (input.estimate.trim()) {
+    estimateCents = parseAmountToCents(input.estimate);
+    if (estimateCents === null || estimateCents <= BigInt(0)) return { error: "El estimado no es válido. Ejemplo: 3,50" };
+  }
+  await db.shoppingListItem.update({
+    where: { id: item.id },
+    data: { quantity, note: input.note.trim().slice(0, 100) || null, estimateCents },
+  });
+  refresh(item.listId);
+  return { error: null };
+}
+
+// Fecha tentativa para ir a comprar ("" = sin fecha). Es solo una referencia.
+export async function setListPlannedDate(listId: string, date: string): Promise<Result> {
+  const { list } = await findList(listId);
+  if (!list) return { error: "Esa lista no existe." };
+  const plannedDate = date ? parseDateInput(date) : null;
+  if (date && !plannedDate) return { error: "La fecha no es válida." };
+  await db.shoppingList.update({ where: { id: list.id }, data: { plannedDate } });
+  refresh(list.id);
   return { error: null };
 }

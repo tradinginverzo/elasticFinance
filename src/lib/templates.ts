@@ -25,10 +25,24 @@ export async function getTemplatesWithStatus(workspaceId: string) {
   });
 
   // Los gastos fijos solo son ingresos o gastos (nunca transferencias).
-  return onlyFlow(templates).map(({ transactions, ...template }) => ({
-    ...template,
-    thisMonth: transactions,
-  }));
+  return onlyFlow(templates).map(({ transactions, ...template }) => {
+    const paidCents = transactions.reduce((s, t) => s + t.amountCents, BigInt(0));
+    // Con pagos parciales: pagado cuando la suma del mes llega al monto. Si no: con un registro.
+    const isPaid = template.allowPartial ? paidCents >= template.amountCents : transactions.length > 0;
+    const remainingCents = isPaid
+      ? BigInt(0)
+      : template.allowPartial
+        ? template.amountCents - paidCents
+        : template.amountCents;
+    return {
+      ...template,
+      thisMonth: transactions,
+      paidCents, // lo registrado este mes
+      isPaid,
+      isPartial: template.allowPartial && !isPaid && paidCents > BigInt(0),
+      remainingCents, // lo que falta este mes
+    };
+  });
 }
 
 // Datos mínimos para el selector del formulario de movimientos (serializables;
@@ -46,7 +60,10 @@ export async function getTemplateOptions(workspaceId: string) {
     categoryName: t.category?.name ?? null,
     categoryColor: t.category?.color ?? null,
     accountName: t.account?.name ?? null,
-    // Fecha del primer registro de este mes ("2026-10-03"), o null si falta registrarlo.
-    registeredOn: t.thisMonth[0]?.date.toISOString().slice(0, 10) ?? null,
+    // Fecha del primer registro de este mes ("2026-10-03"), o null si falta (o falta parte).
+    registeredOn: t.isPaid ? (t.thisMonth[0]?.date.toISOString().slice(0, 10) ?? null) : null,
+    allowPartial: t.allowPartial,
+    paidCents: t.paidCents.toString(), // con pagos parciales: lo ya pagado este mes
+    remainingCents: t.remainingCents.toString(),
   }));
 }

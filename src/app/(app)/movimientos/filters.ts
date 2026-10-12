@@ -14,6 +14,7 @@ export const ACCOUNT_TYPES = [
   { value: "BANK", label: "Banco" },
   { value: "CREDIT_CARD", label: "Tarjeta de crédito" },
   { value: "SAVINGS", label: "Ahorros" },
+  { value: "WALLET", label: "Wallet" },
 ] as const;
 
 export const SORTS = [

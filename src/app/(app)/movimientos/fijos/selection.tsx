@@ -33,8 +33,8 @@ export function SelectionProvider({ currency, children }: { currency: string; ch
     <SelectionContext.Provider value={{ selected, toggle }}>
       {children}
       {selected.size > 0 && (
-        // Encima de la barra de navegación del móvil; abajo del todo en el PC.
-        <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 px-4 lg:bottom-4">
+        // Encima de la barra de navegación del móvil; abajo del todo en el PC. Solo en "Por pagar".
+        <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 hidden px-4 group-data-[estado=por-pagar]/fijos:block lg:bottom-4">
           <div
             role="status"
             className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border bg-background/95 py-2.5 pr-2 pl-4 shadow-lg backdrop-blur"
@@ -65,10 +65,11 @@ export function SelectToggle({ id, amountCents, name }: { id: string; amountCent
   const selection = useContext(SelectionContext);
   if (!selection) return null;
   return (
+    // Las casillas solo se ven en la pestaña "Por pagar".
     <input
       type="checkbox"
       aria-label={`Sumar ${name}`}
-      className="size-5 shrink-0 accent-primary"
+      className="hidden size-5 shrink-0 accent-primary group-data-[estado=por-pagar]/fijos:block"
       checked={selection.selected.has(id)}
       onChange={() => selection.toggle(id, amountCents)}
     />

@@ -44,6 +44,7 @@ export default async function ShoppingListPage({ params }: PageProps<"/compras/[
     unit: i.product.unit,
     note: i.note,
     quantity: i.quantity,
+    estimateCents: i.estimateCents === null ? null : Number(i.estimateCents),
     checked: i.checkedAt !== null,
     price: i.priceEntry
       ? {
@@ -64,6 +65,7 @@ export default async function ShoppingListPage({ params }: PageProps<"/compras/[
         name: list.name,
         storeId: list.storeId,
         branch: list.branch,
+        plannedDate: list.plannedDate ? list.plannedDate.toISOString().slice(0, 10) : null,
         completed: list.completedAt !== null,
       }}
       branches={branches}

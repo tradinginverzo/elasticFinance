@@ -59,7 +59,9 @@ export async function getBaseline(workspaceId: string) {
       amount: Number(t.amountCents),
       categoryName: t.category?.name ?? null,
       categoryColor: t.category?.color ?? null,
-      pending: t.thisMonth.length === 0,
+      pending: !t.isPaid,
+      // Lo que aún falta este mes (con pagos parciales, solo el resto).
+      remaining: Number(t.remainingCents),
     })),
     otherIncome: Math.max(averageOf("INCOME") - fixedOf("INCOME"), 0),
     otherExpense: Math.max(averageOf("EXPENSE") - fixedOf("EXPENSE"), 0),

@@ -7,13 +7,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getAccountsWithBalance } from "@/lib/accounts";
 import { getCategories } from "@/lib/categories";
 import { requireWorkspace } from "@/lib/context";
-import { currentMonth, formatMonth, monthRange } from "@/lib/dates";
+import { addMonthClamped, currentMonth, formatMonth, monthRange, toDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { formatCents } from "@/lib/money";
 import { shortName } from "@/lib/profile-name";
 import { cn } from "@/lib/utils";
 
 import { AccountsCard } from "./accounts-card";
+import { NextPayments } from "./next-payment";
 import { TransactionList, transactionListInclude } from "./movimientos/transaction-list";
 
 export const metadata = { title: "Inicio" };
@@ -24,7 +25,7 @@ export default async function DashboardPage() {
   const { start, end } = monthRange(month);
 
   await getCategories(workspace.id); // asegura los colores de las insignias de categoría
-  const [accounts, totals, recent] = await Promise.all([
+  const [accounts, totals, recent, fixedIncomes] = await Promise.all([
     getAccountsWithBalance(workspace.id),
     db.transaction.groupBy({
       by: ["type"],
@@ -37,7 +38,24 @@ export default async function DashboardPage() {
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 5,
     }),
+    // Ingresos fijos (sueldo…) con la última vez que se registró cada uno.
+    db.transactionTemplate.findMany({
+      where: { workspaceId: workspace.id, type: "INCOME" },
+      orderBy: { amountCents: "desc" },
+      include: { transactions: { orderBy: { date: "desc" }, take: 1, select: { date: true } } },
+    }),
   ]);
+  // Próximo pago estimado de cada uno: último registro + 1 mes.
+  const incomeSchedules = fixedIncomes.map((t) => {
+    const lastDate = t.transactions[0] ? toDateInput(t.transactions[0].date) : null;
+    return {
+      templateId: t.id,
+      name: t.name,
+      amountCents: Number(t.amountCents),
+      lastDate,
+      nextDate: lastDate ? addMonthClamped(lastDate) : null,
+    };
+  });
 
   const sum = (type: "INCOME" | "EXPENSE") =>
     totals.find((t) => t.type === type)?._sum.amountCents ?? BigInt(0);
@@ -128,6 +146,8 @@ export default async function DashboardPage() {
           <p className="-mt-2 text-xs text-muted-foreground first-letter:uppercase">{formatMonth(month)}</p>
         </CardContent>
       </Card>
+
+      {incomeSchedules.length > 0 && <NextPayments incomes={incomeSchedules} currency={currency} />}
 
       {accounts.length === 0 ? (
         <Card>

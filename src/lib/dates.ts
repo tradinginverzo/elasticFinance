@@ -36,6 +36,15 @@ export function monthRange(month: string) {
   };
 }
 
+// "2026-10-04" + 1 mes → "2026-11-04". Si el día no existe en ese mes, el último (31 ene → 28 feb).
+export function addMonthClamped(date: string, months = 1) {
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return toDateInput(target);
+}
+
 export function currentMonth() {
   return todayInput().slice(0, 7);
 }

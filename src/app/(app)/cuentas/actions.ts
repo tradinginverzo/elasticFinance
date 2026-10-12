@@ -11,7 +11,7 @@ export type AccountFormState = { error: string | null };
 
 const accountSchema = z.object({
   name: z.string().trim().min(1, "Ponle un nombre a la cuenta.").max(60),
-  type: z.enum(["CASH", "BANK", "CREDIT_CARD", "SAVINGS"]),
+  type: z.enum(["CASH", "BANK", "CREDIT_CARD", "SAVINGS", "WALLET"]),
   initialBalance: z.string().trim(),
 });
 

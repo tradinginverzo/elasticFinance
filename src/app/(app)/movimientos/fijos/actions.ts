@@ -18,6 +18,7 @@ const templateSchema = z.object({
   accountId: z.union([z.uuid(), z.literal("")]),
   categoryId: z.union([z.uuid(), z.literal("")]),
   merchant: z.string().trim().max(100),
+  allowPartial: z.literal("on").optional(), // casilla "Permitir pagos parciales"
 });
 
 // templateId = null → crear; si no, editar ese gasto fijo.
@@ -63,6 +64,7 @@ export async function saveTemplate(
     accountId: account?.id ?? null,
     categoryId: category?.id ?? null,
     merchant: input.merchant || null,
+    allowPartial: input.allowPartial === "on",
   };
 
   if (templateId) {
@@ -132,6 +134,7 @@ export async function copyTemplates(
           name: t.name,
           type: t.type,
           amountCents: t.amountCents,
+          allowPartial: t.allowPartial,
           merchant: t.merchant,
           categoryId,
           accountId: t.account ? (accountByName.get(t.account.name.trim().toLocaleLowerCase("es")) ?? null) : null,

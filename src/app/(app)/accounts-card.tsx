@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-export type AccountType = "CASH" | "BANK" | "SAVINGS" | "CREDIT_CARD";
+export type AccountType = "CASH" | "BANK" | "SAVINGS" | "WALLET" | "CREDIT_CARD";
 export type AccountRow = { id: string; name: string; type: AccountType; balanceCents: number; currency: string };
 
 // Grupos de la pestaña "Por tipo", en este orden.
@@ -16,6 +16,7 @@ const TYPE_GROUPS: { type: AccountType; label: string }[] = [
   { type: "CASH", label: "Efectivo" },
   { type: "BANK", label: "Bancos" },
   { type: "SAVINGS", label: "Ahorro" },
+  { type: "WALLET", label: "Wallet" },
   { type: "CREDIT_CARD", label: "Tarjetas de crédito" },
 ];
 
@@ -70,6 +71,7 @@ const TYPE_COLORS: Record<AccountType, string> = {
   CASH: "var(--cat-1)",
   BANK: "var(--cat-2)",
   SAVINGS: "var(--cat-3)",
+  WALLET: "var(--cat-5)",
   CREDIT_CARD: "var(--cat-4)",
 };
 

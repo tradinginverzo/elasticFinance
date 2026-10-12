@@ -35,7 +35,7 @@ export async function updateProduct(productId: string, name: string): Promise<Re
   });
   if (taken) return { error: `Ya existe «${taken.name}».` };
   await db.product.update({ where: { id: productId }, data: { name: clean } });
-  revalidatePath(`/precios/${productId}`);
+  revalidatePath("/precios", "layout"); // ficha, edición y listado
   return { error: null };
 }
 
@@ -95,8 +95,7 @@ export async function deletePrice(priceId: string): Promise<Result> {
   const price = await db.priceEntry.findFirst({ where: { id: priceId, workspaceId: workspace.id } });
   if (!price) return { error: "Ese precio no existe." };
   await db.priceEntry.delete({ where: { id: price.id } });
-  revalidatePath(`/precios/${price.productId}`);
-  revalidatePath("/precios");
+  revalidatePath("/precios", "layout"); // ficha, edición y listado
   return { error: null };
 }
 

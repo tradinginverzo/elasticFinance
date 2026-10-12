@@ -26,18 +26,18 @@ export default async function TemplatesPage({ searchParams }: PageProps<"/movimi
 
   const expenses = templates.filter((t) => t.type === "EXPENSE");
   const incomes = templates.filter((t) => t.type === "INCOME");
-  const isPaid = (t: (typeof templates)[number]) => t.thisMonth.length > 0;
+  // Pagado = registrado este mes (con pagos parciales: cuando la suma llega al monto).
   const counts: Record<State, number> = {
     todos: templates.length,
-    "por-pagar": templates.filter((t) => !isPaid(t)).length,
-    pagados: templates.filter(isPaid).length,
+    "por-pagar": templates.filter((t) => !t.isPaid).length,
+    pagados: templates.filter((t) => t.isPaid).length,
   };
-  // Lo que falta pagar este mes (gastos fijos sin registrar, por su monto habitual).
-  const pendingExpenseCents = expenses.filter((t) => !isPaid(t)).reduce((s, t) => s + t.amountCents, BigInt(0));
+  // Lo que falta pagar este mes (con pagos parciales, solo lo que queda).
+  const pendingExpenseCents = expenses.reduce((s, t) => s + t.remainingCents, BigInt(0));
 
   const monthlyFixed = expenses.reduce((s, t) => s + t.amountCents, BigInt(0));
   const monthlyFixedIncome = incomes.reduce((s, t) => s + t.amountCents, BigInt(0));
-  const pending = templates.filter((t) => t.thisMonth.length === 0).length;
+  const pending = templates.filter((t) => !t.isPaid).length;
   const registeredCount = templates.length - pending;
 
   return (
@@ -145,8 +145,8 @@ export default async function TemplatesPage({ searchParams }: PageProps<"/movimi
           </Card>
 
           {/* Filtro instantáneo: oculta filas con CSS según la pestaña (ver state-filter.tsx). */}
-          <SelectionProvider currency={workspace.currency}>
-            <StateFilter initial={state} counts={counts}>
+          <StateFilter initial={state} counts={counts}>
+            <SelectionProvider currency={workspace.currency}>
               {pendingExpenseCents > BigInt(0) && (
                 <p className="-mt-4 hidden px-1 text-sm text-muted-foreground group-data-[estado=por-pagar]/fijos:block">
                   Te falta pagar{" "}
@@ -168,8 +168,8 @@ export default async function TemplatesPage({ searchParams }: PageProps<"/movimi
                   Todavía no has pagado ninguno este mes.
                 </p>
               )}
-            </StateFilter>
-          </SelectionProvider>
+            </SelectionProvider>
+          </StateFilter>
         </>
       )}
     </div>
@@ -186,7 +186,7 @@ function TemplateGroup({
   currency: string;
 }) {
   if (templates.length === 0) return null;
-  const paid = templates.filter((t) => t.thisMonth.length > 0).length;
+  const paid = templates.filter((t) => t.isPaid).length;
   return (
     <section
       className={cn(
@@ -199,20 +199,20 @@ function TemplateGroup({
       <h2 className="px-1 text-xs font-medium text-muted-foreground">{title}</h2>
       <ul className="divide-y overflow-hidden rounded-xl border bg-card">
         {templates.map((t) => {
-          const registered = t.thisMonth[0];
+          // El último registro del mes (con pagos parciales puede haber varios).
+          const last = t.thisMonth[t.thisMonth.length - 1];
+          const payments = t.thisMonth.length;
           return (
             <li
               key={t.id}
               className={cn(
                 "flex items-center gap-3 px-4 py-3",
-                registered
-                  ? "group-data-[estado=por-pagar]/fijos:hidden"
-                  : "group-data-[estado=pagados]/fijos:hidden",
+                t.isPaid ? "group-data-[estado=por-pagar]/fijos:hidden" : "group-data-[estado=pagados]/fijos:hidden",
               )}
             >
-              {/* Gastos por pagar: casilla para sumar cuánto saldría pagar varios. */}
-              {!registered && t.type === "EXPENSE" && (
-                <SelectToggle id={t.id} amountCents={Number(t.amountCents)} name={t.name} />
+              {/* Gastos por pagar: casilla para sumar cuánto saldría pagar varios (lo que falta). */}
+              {!t.isPaid && t.type === "EXPENSE" && (
+                <SelectToggle id={t.id} amountCents={Number(t.remainingCents)} name={t.name} />
               )}
               <CategoryBadge
                 name={t.category?.name ?? null}
@@ -221,15 +221,42 @@ function TemplateGroup({
               />
               <Link href={`/movimientos/fijos/${t.id}`} className="min-w-0 flex-1">
                 <p className="truncate font-medium">{t.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {[formatCents(t.amountCents, currency), t.category?.name, t.account?.name]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
+                {t.isPartial ? (
+                  <>
+                    <p className="truncate text-xs text-muted-foreground">
+                      Pagado {formatCents(t.paidCents, currency)} de {formatCents(t.amountCents, currency)} ·{" "}
+                      <span className="font-medium text-foreground">faltan {formatCents(t.remainingCents, currency)}</span>
+                    </p>
+                    <div
+                      className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                      role="progressbar"
+                      aria-label={`Pagado de ${t.name}`}
+                      aria-valuemin={0}
+                      aria-valuemax={Number(t.amountCents)}
+                      aria-valuenow={Number(t.paidCents)}
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${(Number(t.paidCents) / Number(t.amountCents)) * 100}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {[
+                      formatCents(t.amountCents, currency),
+                      t.allowPartial ? "pagos parciales" : null,
+                      t.category?.name,
+                      t.account?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                )}
               </Link>
-              {registered ? (
+              {t.isPaid && last ? (
                 <Link
-                  href={`/movimientos/${registered.id}`}
+                  href={`/movimientos/${last.id}`}
                   className="flex items-center gap-1.5 text-right text-xs text-muted-foreground"
                 >
                   <CheckCircle2Icon className="size-4 text-income" />
@@ -240,16 +267,19 @@ function TemplateGroup({
                         t.type === "EXPENSE" ? "text-expense" : "text-income",
                       )}
                     >
-                      {formatCents(registered.amountCents, currency)}
+                      {formatCents(t.paidCents, currency)}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <UsualDiffBadge
-                        type={t.type}
-                        amountCents={Number(registered.amountCents)}
-                        usualCents={Number(registered.templateAmountCents ?? t.amountCents)}
-                        currency={currency}
-                      />
-                      {formatDate(registered.date)}
+                      {/* Con pagos parciales no se compara con el habitual (pagar por partes es lo normal). */}
+                      {!t.allowPartial && (
+                        <UsualDiffBadge
+                          type={t.type}
+                          amountCents={Number(last.amountCents)}
+                          usualCents={Number(last.templateAmountCents ?? t.amountCents)}
+                          currency={currency}
+                        />
+                      )}
+                      {payments > 1 ? `${payments} pagos · ${formatDate(last.date)}` : formatDate(last.date)}
                     </span>
                   </span>
                 </Link>
@@ -260,7 +290,7 @@ function TemplateGroup({
                   render={<Link href={`/movimientos/nuevo?fijo=${t.id}`} />}
                   nativeButton={false}
                 >
-                  Registrar
+                  {t.isPartial ? "Pagar resto" : "Registrar"}
                 </Button>
               )}
             </li>

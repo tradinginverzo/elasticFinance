@@ -191,7 +191,9 @@ function TemplateSection({
                   <p className="truncate text-xs text-muted-foreground">
                     {registeredDate
                       ? `Registrado el ${formatDate(registeredDate)}`
-                      : [t.categoryName, t.accountName].filter(Boolean).join(" · ") || "Sin categoría"}
+                      : t.allowPartial && BigInt(t.paidCents) > BigInt(0)
+                        ? `Pagado ${formatCents(BigInt(t.paidCents), currency)} · faltan ${formatCents(BigInt(t.remainingCents), currency)}`
+                        : [t.categoryName, t.accountName].filter(Boolean).join(" · ") || "Sin categoría"}
                   </p>
                 </div>
                 <span

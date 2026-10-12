@@ -23,6 +23,7 @@ export function TemplateForm({
   accounts,
   categories,
   currency,
+  cancelHref = "/movimientos/fijos",
 }: {
   template?: {
     id: string;
@@ -32,10 +33,12 @@ export function TemplateForm({
     accountId: string | null;
     categoryId: string | null;
     merchant: string | null;
+    allowPartial: boolean;
   };
   accounts: { id: string; name: string }[];
   categories: { id: string; name: string; type: TransactionType; color: string | null }[];
   currency: string;
+  cancelHref?: string; // al editar: vuelve a la ficha del gasto fijo
 }) {
   const { state, onSubmit, pending } = useFormAction(
     saveTemplate.bind(null, template?.id ?? null),
@@ -139,6 +142,22 @@ export function TemplateForm({
           />
         </div>
 
+        <label className="flex items-start gap-3 rounded-xl border p-3 text-sm">
+          <input
+            type="checkbox"
+            name="allowPartial"
+            className="mt-0.5 size-4 shrink-0 accent-primary"
+            defaultChecked={template?.allowPartial ?? false}
+          />
+          <span>
+            <span className="font-medium">Permitir pagos parciales</span>
+            <span className="block text-xs text-muted-foreground">
+              Para lo que pagas por partes (p. ej. el alquiler en dos veces): cuenta como pagado cuando lo
+              registrado en el mes llega al monto habitual.
+            </span>
+          </span>
+        </label>
+
         <FormError message={state.error} />
 
         <div className="flex gap-2">
@@ -149,7 +168,7 @@ export function TemplateForm({
             variant="outline"
             size="lg"
             className="h-10"
-            render={<Link href="/movimientos/fijos" />}
+            render={<Link href={cancelHref} />}
             nativeButton={false}
           >
             Cancelar

@@ -8,6 +8,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   BANK: "Cuenta bancaria",
   CREDIT_CARD: "Tarjeta de crédito",
   SAVINGS: "Ahorro",
+  WALLET: "Wallet",
 };
 
 // Cuentas del espacio con su saldo actual =
