@@ -1,21 +1,19 @@
 import { notFound } from "next/navigation";
 
+import { DetailHeader } from "@/components/detail";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireWorkspace } from "@/lib/context";
 import { formatDate } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { formatAmount } from "@/lib/money";
 import { formatPercent } from "@/lib/price-compare";
-import { getBranches, getProductReferences, getStores, toSeenPrice } from "@/lib/prices";
+import { getBranches, getProductReferences, getStores } from "@/lib/prices";
 import { formatPack, formatUnitPrice, PRODUCT_UNITS } from "@/lib/units";
-import { cn } from "@/lib/utils";
 
 import { AddPriceForm } from "./add-price-form";
-import { DeletePriceButton, ProductSettings } from "./product-settings";
+import { PriceHistory } from "./price-history";
 
 export const metadata = { title: "Producto" };
-
-const SOURCE_LABEL = { MANUAL: "A mano", SHOPPING: "Lista de compras", RECEIPT: "Factura" } as const;
 
 export default async function ProductPage({ params }: PageProps<"/precios/[id]">) {
   const { id } = await params;
@@ -46,13 +44,15 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{product.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {PRODUCT_UNITS.find((u) => u.value === product.unit)?.label} · precios por{" "}
-          {product.unit === "ML" ? "litro" : product.unit === "G" ? "kilo" : "unidad"}
-        </p>
-      </div>
+      <DetailHeader
+        backHref="/precios"
+        backLabel="Precios"
+        title={product.name}
+        subtitle={`${PRODUCT_UNITS.find((u) => u.value === product.unit)?.label} · precios por ${
+          product.unit === "ML" ? "litro" : product.unit === "G" ? "kilo" : "unidad"
+        }`}
+        editHref={`/precios/${product.id}/editar`}
+      />
 
       <Card>
         <CardHeader>
@@ -60,7 +60,7 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
         </CardHeader>
         <CardContent>
           {ranked.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Anota el primer precio abajo.</p>
+            <p className="text-sm text-muted-foreground">Aún no hay precios. Anota el primero abajo.</p>
           ) : (
             <ul className="flex flex-col divide-y">
               {ranked.map((s, i) => {
@@ -111,11 +111,12 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Anotar precio</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <details className="group rounded-xl border bg-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 font-medium">
+          + Anotar precio
+          <span className="text-xs text-muted-foreground group-open:hidden">Tocar para abrir</span>
+        </summary>
+        <div className="border-t px-4 py-4">
           <AddPriceForm
             productId={product.id}
             unit={product.unit}
@@ -124,42 +125,10 @@ export default async function ProductPage({ params }: PageProps<"/precios/[id]">
             branches={branches}
             reference={reference}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
-      {history.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="px-1 text-sm font-medium">Historial</h2>
-          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-            {history.map((entry) => {
-              const seen = toSeenPrice(entry);
-              return (
-                <li key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {entry.store.name}
-                      {entry.branch && <span className="font-normal text-muted-foreground"> · {entry.branch}</span>}
-                      {entry.onSale && <span className={cn("ml-2 text-xs font-semibold text-income")}>Oferta</span>}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {formatDate(entry.date, { day: "numeric", month: "short", year: "numeric" })} ·{" "}
-                      {[entry.brand, formatPack(entry.sizeEach, entry.packCount, product.unit)].filter(Boolean).join(" · ")}{" "}
-                      · {SOURCE_LABEL[entry.source]}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold tabular-nums">{formatAmount(seen.priceCents, currency)}</p>
-                    <p className="text-xs text-muted-foreground tabular-nums">{unitPrice(seen.unitCents)}</p>
-                  </div>
-                  <DeletePriceButton priceId={entry.id} />
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      <ProductSettings productId={product.id} name={product.name} />
+      <PriceHistory history={history} unit={product.unit} currency={currency} />
     </div>
   );
 }

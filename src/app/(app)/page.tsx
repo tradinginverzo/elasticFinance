@@ -1,17 +1,20 @@
 import { ChevronRightIcon, PlusIcon, ReceiptTextIcon, UserRoundIcon } from "lucide-react";
 import Link from "next/link";
 
+import { Donut } from "@/components/donut";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getAccountsWithBalance } from "@/lib/accounts";
 import { getCategories } from "@/lib/categories";
 import { requireWorkspace } from "@/lib/context";
-import { currentMonth, formatMonth, monthRange } from "@/lib/dates";
+import { addMonthClamped, currentMonth, formatMonth, monthRange, toDateInput } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { formatCents } from "@/lib/money";
 import { shortName } from "@/lib/profile-name";
 import { cn } from "@/lib/utils";
 
+import { AccountsCard } from "./accounts-card";
+import { NextPayments } from "./next-payment";
 import { TransactionList, transactionListInclude } from "./movimientos/transaction-list";
 
 export const metadata = { title: "Inicio" };
@@ -22,7 +25,7 @@ export default async function DashboardPage() {
   const { start, end } = monthRange(month);
 
   await getCategories(workspace.id); // asegura los colores de las insignias de categoría
-  const [accounts, totals, recent] = await Promise.all([
+  const [accounts, totals, recent, fixedIncomes] = await Promise.all([
     getAccountsWithBalance(workspace.id),
     db.transaction.groupBy({
       by: ["type"],
@@ -35,7 +38,24 @@ export default async function DashboardPage() {
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 5,
     }),
+    // Ingresos fijos (sueldo…) con la última vez que se registró cada uno.
+    db.transactionTemplate.findMany({
+      where: { workspaceId: workspace.id, type: "INCOME" },
+      orderBy: { amountCents: "desc" },
+      include: { transactions: { orderBy: { date: "desc" }, take: 1, select: { date: true } } },
+    }),
   ]);
+  // Próximo pago estimado de cada uno: último registro + 1 mes.
+  const incomeSchedules = fixedIncomes.map((t) => {
+    const lastDate = t.transactions[0] ? toDateInput(t.transactions[0].date) : null;
+    return {
+      templateId: t.id,
+      name: t.name,
+      amountCents: Number(t.amountCents),
+      lastDate,
+      nextDate: lastDate ? addMonthClamped(lastDate) : null,
+    };
+  });
 
   const sum = (type: "INCOME" | "EXPENSE") =>
     totals.find((t) => t.type === type)?._sum.amountCents ?? BigInt(0);
@@ -43,6 +63,14 @@ export default async function DashboardPage() {
   const expense = sum("EXPENSE");
   const totalBalance = accounts.reduce((s, a) => s + a.balanceCents, BigInt(0));
   const currency = workspace.currency;
+
+  // Torta del mes: de lo que entró, cuánto se gastó y cuánto queda.
+  const incomeN = Number(income);
+  const expenseN = Number(expense);
+  const spentShare = incomeN > 0 ? expenseN / incomeN : expenseN > 0 ? Infinity : 0;
+  const spentLabel = !Number.isFinite(spentShare)
+    ? "Sin ingresos"
+    : new Intl.NumberFormat("es", { style: "percent", maximumFractionDigits: 0 }).format(spentShare);
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,16 +105,38 @@ export default async function DashboardPage() {
 
       <Card>
         <CardContent className="flex flex-col gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">Saldo total</p>
-            <p
-              className={cn(
-                "text-3xl font-semibold tracking-tight tabular-nums",
-                totalBalance < BigInt(0) && "text-expense",
-              )}
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground">Saldo total</p>
+              <p
+                className={cn(
+                  "truncate text-3xl font-semibold tracking-tight tabular-nums",
+                  totalBalance < BigInt(0) && "text-expense",
+                )}
+              >
+                {formatCents(totalBalance, currency)}
+              </p>
+            </div>
+            {/* Cuánto de lo que entró este mes ya se gastó (rojo) y cuánto queda (verde). */}
+            <Donut
+              size={76}
+              thickness={9}
+              slices={[
+                { key: "gastos", label: `Gastos: ${formatCents(expense, currency)}`, value: expenseN, color: "var(--expense)" },
+                {
+                  key: "queda",
+                  label: `Te queda: ${formatCents(income > expense ? income - expense : BigInt(0), currency)}`,
+                  value: Math.max(incomeN - expenseN, 0),
+                  color: "var(--income)",
+                },
+              ]}
+              label={`Este mes gastaste ${spentLabel} de tus ingresos`}
             >
-              {formatCents(totalBalance, currency)}
-            </p>
+              <span className={cn("text-sm leading-none font-semibold", spentShare > 1 && "text-expense")}>
+                {Number.isFinite(spentShare) ? spentLabel : "—"}
+              </span>
+              <span className="mt-0.5 text-[10px] leading-none text-muted-foreground">gastado</span>
+            </Donut>
           </div>
           <div className="grid grid-cols-3 gap-2 border-t pt-4">
             <MonthStat label="Ingresos" value={formatCents(income, currency)} className="text-income" />
@@ -96,6 +146,8 @@ export default async function DashboardPage() {
           <p className="-mt-2 text-xs text-muted-foreground first-letter:uppercase">{formatMonth(month)}</p>
         </CardContent>
       </Card>
+
+      {incomeSchedules.length > 0 && <NextPayments incomes={incomeSchedules} currency={currency} />}
 
       {accounts.length === 0 ? (
         <Card>
@@ -116,26 +168,16 @@ export default async function DashboardPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <Card className="gap-0 pb-0">
-            <CardHeader className="pb-3">
-              <CardTitle>Cuentas</CardTitle>
-            </CardHeader>
-            <ul className="divide-y border-t">
-              {accounts.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <span className="truncate">{a.name}</span>
-                  <span
-                    className={cn(
-                      "font-medium tabular-nums",
-                      a.balanceCents < BigInt(0) && "text-expense",
-                    )}
-                  >
-                    {formatCents(a.balanceCents, a.currency)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <AccountsCard
+            currency={currency}
+            accounts={accounts.map((a) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              balanceCents: Number(a.balanceCents),
+              currency: a.currency,
+            }))}
+          />
 
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">

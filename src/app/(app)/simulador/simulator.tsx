@@ -167,7 +167,7 @@ function SimulatorForm({
   const pending = sorted.filter((t) => t.pending);
   // Lo que aún entra/sale este mes por fijos sin registrar (ya registrados = ya están en el saldo).
   // Si ya pagaste uno, lo correcto es registrarlo en Movimientos: así deja de estar pendiente.
-  const pendingNet = pending.reduce((s, t) => s + (t.type === "INCOME" ? t.amount : -t.amount), 0);
+  const pendingNet = pending.reduce((s, t) => s + (t.type === "INCOME" ? t.remaining : -t.remaining), 0);
 
   // ── Escenario ──
   const [kind, setKind] = useState<Kind>("purchase");

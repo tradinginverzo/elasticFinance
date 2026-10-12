@@ -33,6 +33,13 @@ enum AccountType {
   BANK
   CREDIT_CARD
   SAVINGS
+  WALLET // billetera digital (PayPal, Binance, Payphone…)
+}
+
+// Cargo extra de un gasto o transferencia, guardado como su propio movimiento de gasto.
+enum ChargeType {
+  COMMISSION // comisión (categoría "Comisión")
+  TAX // IVA (categoría "IVA")
 }
 
 enum TransactionType {
@@ -165,6 +172,9 @@ model Transaction {
   // Monto habitual del gasto fijo al registrarlo: para marcar si este mes fue distinto
   // sin que un cambio posterior del monto habitual altere los meses anteriores.
   templateAmountCents BigInt?         @map("template_amount_cents")
+  // Comisión o IVA de otro movimiento: `parentId` es ese movimiento y se borra con él.
+  parentId            String?         @map("parent_id") @db.Uuid
+  chargeType          ChargeType?     @map("charge_type")
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -175,25 +185,30 @@ model Transaction {
   toAccount Account?             @relation("TransferToAccount", fields: [toAccountId], references: [id], onDelete: Cascade)
   category  Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   receipts  Receipt[]
+  parent    Transaction?         @relation("TransactionCharges", fields: [parentId], references: [id], onDelete: Cascade)
+  charges   Transaction[]        @relation("TransactionCharges")
 
   @@index([workspaceId, date(sort: Desc)])
   @@index([templateId, date])
   @@index([toAccountId])
+  @@index([parentId])
   @@map("transactions")
 }
 
 // Gasto (o ingreso) fijo guardado: alquiler, luz, sueldo… Sirve de plantilla para
 // registrar el movimiento de cada mes; el monto se puede cambiar al registrarlo.
 model TransactionTemplate {
-  id          String          @id @default(uuid()) @db.Uuid
-  workspaceId String          @map("workspace_id") @db.Uuid
-  name        String
-  type        TransactionType
-  amountCents BigInt          @map("amount_cents") // monto habitual
-  accountId   String?         @map("account_id") @db.Uuid
-  categoryId  String?         @map("category_id") @db.Uuid
-  merchant    String?
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  id           String          @id @default(uuid()) @db.Uuid
+  workspaceId  String          @map("workspace_id") @db.Uuid
+  name         String
+  type         TransactionType
+  amountCents  BigInt          @map("amount_cents") // monto habitual
+  // Se puede pagar por partes: cuenta como pagado cuando la suma del mes llega al monto.
+  allowPartial Boolean         @default(false) @map("allow_partial")
+  accountId    String?         @map("account_id") @db.Uuid
+  categoryId   String?         @map("category_id") @db.Uuid
+  merchant     String?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account      Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -353,6 +368,7 @@ model ShoppingList {
   name        String
   storeId     String?   @map("store_id") @db.Uuid // dónde se está comprando
   branch      String? // sucursal opcional
+  plannedDate DateTime? @map("planned_date") @db.Date // fecha tentativa para ir a comprar (solo referencia)
   completedAt DateTime? @map("completed_at") @db.Timestamptz
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
@@ -366,14 +382,17 @@ model ShoppingList {
 }
 
 model ShoppingListItem {
-  id           String    @id @default(uuid()) @db.Uuid
-  listId       String    @map("list_id") @db.Uuid
-  productId    String    @map("product_id") @db.Uuid
-  note         String? // "el grande", "sin lactosa"…
-  quantity     Int       @default(1) // paquetes que se llevan
-  priceEntryId String?   @unique @map("price_entry_id") @db.Uuid // precio marcado en el súper
-  checkedAt    DateTime? @map("checked_at") @db.Timestamptz // ya está en el carrito
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id            String    @id @default(uuid()) @db.Uuid
+  listId        String    @map("list_id") @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  note          String? // "el grande", "sin lactosa"…
+  quantity      Int       @default(1) // paquetes que se llevan
+  // Lo que se calcula que costará cada paquete (para productos nunca comprados, o para corregir
+  // la sugerencia). Si es null se usa el último precio visto.
+  estimateCents BigInt?   @map("estimate_cents")
+  priceEntryId  String?   @unique @map("price_entry_id") @db.Uuid // precio marcado en el súper
+  checkedAt     DateTime? @map("checked_at") @db.Timestamptz // ya está en el carrito
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   list       ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
   product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)

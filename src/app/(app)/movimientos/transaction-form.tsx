@@ -52,6 +52,9 @@ export type TransactionFormData = {
   templateId: string | null;
   // Gasto fijo del que salió y su monto habitual al registrarlo (para marcar si fue distinto).
   usual: { name: string; amountCents: string } | null;
+  commission: string; // comisión ligada ("" si no tiene)
+  tax: string; // IVA ligado ("" si no tiene)
+  chargeOf: string | null; // si ESTE movimiento es la comisión/IVA de otro: su nombre
 };
 
 // Gasto fijo para rellenar el formulario (ver src/lib/templates.ts).
@@ -66,10 +69,19 @@ export type TemplateOption = {
   categoryName: string | null;
   categoryColor: string | null;
   accountName: string | null;
-  registeredOn: string | null; // "2026-10-03" si ya se registró este mes
+  registeredOn: string | null; // "2026-10-03" si ya se registró (completo) este mes
+  allowPartial: boolean; // se puede pagar por partes
+  paidCents: string; // lo ya pagado este mes (pagos parciales)
+  remainingCents: string; // lo que falta este mes
 };
 
 const initialState: TransactionFormState = { error: null };
+
+// Monto a proponer al usar un gasto fijo: el habitual o, si ya se pagó una parte, lo que falta.
+function templateAmount(t: TemplateOption) {
+  const remaining = BigInt(t.remainingCents);
+  return t.allowPartial && BigInt(t.paidCents) > BigInt(0) && remaining > BigInt(0) ? remaining : BigInt(t.amountCents);
+}
 
 // Factura adjunta al crear el movimiento. `fromList`: ya estaba subida (viene de /facturas).
 export type FormReceipt = UploadedReceipt & { fromList?: boolean };
@@ -111,6 +123,7 @@ export function TransactionForm({
   initialReceipt = null,
   receiptReadingEnabled = false,
   branchSuggestions = [],
+  cancelHref = "/movimientos",
 }: {
   transaction?: TransactionFormData;
   accounts: { id: string; name: string }[];
@@ -121,6 +134,7 @@ export function TransactionForm({
   initialReceipt?: FormReceipt | null;
   receiptReadingEnabled?: boolean;
   branchSuggestions?: string[];
+  cancelHref?: string; // al editar: vuelve a la ficha del movimiento
 }) {
   const { state, onSubmit, pending } = useFormAction(
     saveTransaction.bind(null, transaction?.id ?? null),
@@ -148,7 +162,7 @@ export function TransactionForm({
   const base = template
     ? {
         type: template.type,
-        amount: centsToInput(BigInt(template.amountCents)),
+        amount: centsToInput(templateAmount(template)),
         accountId: template.accountId ?? accounts[0]?.id,
         categoryId: template.categoryId,
         merchant: template.merchant || template.name,
@@ -171,7 +185,8 @@ export function TransactionForm({
 
   // Lo que se va escribiendo en "Monto", para comparar en vivo con el monto habitual.
   const [amountText, setAmountText] = useState(prefill.amount ?? "");
-  const usual = template
+  // Con pagos parciales no se avisa "distinto de lo habitual": pagar una parte es lo normal.
+  const usual = template && !template.allowPartial
     ? { name: template.name, cents: Number(template.amountCents) }
     : transaction?.usual
       ? { name: transaction.usual.name, cents: Number(transaction.usual.amountCents) }
@@ -197,7 +212,7 @@ export function TransactionForm({
     const next = templates.find((t) => t.id === id);
     if (next) setType(next.type);
     // El monto de la factura (si hay) manda sobre el habitual del gasto fijo.
-    setAmountText(scanFill?.amount ?? (next ? centsToInput(BigInt(next.amountCents)) : ""));
+    setAmountText(scanFill?.amount ?? (next ? centsToInput(templateAmount(next)) : ""));
     if (next?.accountId) changeFromAccount(next.accountId);
   }
 
@@ -408,6 +423,16 @@ export function TransactionForm({
           </div>
         )}
 
+        {/* Comisión e IVA: opcionales, solo en gastos y transferencias (no en una comisión/IVA). */}
+        {type !== "INCOME" && !transaction?.chargeOf && (
+          <ChargesFields
+            key={`charges-${type}`}
+            commission={transaction?.commission ?? ""}
+            tax={transaction?.tax ?? ""}
+            currency={currency}
+          />
+        )}
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="merchant">
             {type === "EXPENSE" ? "Comercio o descripción" : "Descripción"}
@@ -461,7 +486,7 @@ export function TransactionForm({
             variant="outline"
             size="lg"
             className="h-10"
-            render={<Link href="/movimientos" />}
+            render={<Link href={cancelHref} />}
             nativeButton={false}
           >
             Cancelar
@@ -517,5 +542,57 @@ function ReceiptCard({ receipt, onRemove }: { receipt: FormReceipt; onRemove: ()
         Quitar
       </Button>
     </div>
+  );
+}
+
+// Comisión e IVA del gasto o transferencia. Si se llenan, se guardan como gastos aparte
+// (categorías "Comisión" e "IVA") en la misma cuenta y fecha.
+function ChargesFields({ commission, tax, currency }: { commission: string; tax: string; currency: string }) {
+  const [open, setOpen] = useState(Boolean(commission || tax));
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="-mt-2 self-start text-sm font-medium text-primary underline-offset-4 hover:underline"
+      >
+        + Agregar comisión o IVA
+      </button>
+    );
+  }
+  return (
+    <fieldset className="flex flex-col gap-2 rounded-xl border p-3">
+      <legend className="px-1 text-sm font-medium">Comisión e IVA (opcional)</legend>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="commission">Comisión ({currency})</Label>
+          <Input
+            id="commission"
+            name="commission"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            className="h-10 tabular-nums"
+            defaultValue={commission}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tax">IVA ({currency})</Label>
+          <Input
+            id="tax"
+            name="tax"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            className="h-10 tabular-nums"
+            defaultValue={tax}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Se registran como gastos aparte (categorías Comisión e IVA), en la misma cuenta y fecha. Vacío: no se crea
+        nada.
+      </p>
+    </fieldset>
   );
 }

@@ -81,6 +81,16 @@
   /* Series de gráficos: paleta categórica validada (slots 1 y 2), distinta de ingreso/gasto. */
   --series-1: #2a78d6;
   --series-2: #eb6834;
+  /* Colores por entidad para gráficos de partes (p. ej. cuentas en la torta), en orden fijo.
+     Validados con el validador de dataviz (daltonismo y separación) contra la tarjeta clara. */
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #008300;
+  --cat-7: #4a3aa7;
+  --cat-8: #e34948;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -120,6 +130,15 @@
   --expense: oklch(0.704 0.191 22.216);
   --series-1: #3987e5;
   --series-2: #d95926;
+  /* Los mismos 8 tonos, ajustados para la tarjeta oscura (validados aparte). */
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #008300;
+  --cat-7: #9085e9;
+  --cat-8: #e66767;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

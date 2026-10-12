@@ -12,13 +12,14 @@ import { useFormAction } from "@/hooks/use-form-action";
 
 import { deleteAccount, saveAccount, type AccountFormState } from "./actions";
 
-type AccountType = "CASH" | "BANK" | "CREDIT_CARD" | "SAVINGS";
+type AccountType = "CASH" | "BANK" | "CREDIT_CARD" | "SAVINGS" | "WALLET";
 
 const TYPE_OPTIONS: { value: AccountType; label: string }[] = [
   { value: "CASH", label: "Efectivo" },
   { value: "BANK", label: "Cuenta bancaria" },
   { value: "CREDIT_CARD", label: "Tarjeta de crédito" },
   { value: "SAVINGS", label: "Ahorro" },
+  { value: "WALLET", label: "Wallet" },
 ];
 
 const initialState: AccountFormState = { error: null };
@@ -26,6 +27,7 @@ const initialState: AccountFormState = { error: null };
 export function AccountForm({
   account,
   currency,
+  cancelHref = "/cuentas",
 }: {
   account?: {
     id: string;
@@ -35,6 +37,7 @@ export function AccountForm({
     transactionCount: number;
   };
   currency: string;
+  cancelHref?: string; // al editar: vuelve a la ficha de la cuenta
 }) {
   const { state, onSubmit, pending } = useFormAction(
     saveAccount.bind(null, account?.id ?? null),
@@ -113,7 +116,7 @@ export function AccountForm({
             variant="outline"
             size="lg"
             className="h-10"
-            render={<Link href="/cuentas" />}
+            render={<Link href={cancelHref} />}
             nativeButton={false}
           >
             Cancelar
