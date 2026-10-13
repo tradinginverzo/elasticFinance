@@ -3,6 +3,7 @@
 import { CameraIcon, CircleCheckIcon, FileTextIcon, ImageIcon, LoaderCircleIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { ImageCropper } from "@/components/image-cropper";
 import { Button } from "@/components/ui/button";
 import { compressImage } from "@/lib/image";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -16,11 +17,19 @@ export function PhoneCapture({ token, workspaceName }: { token: string; workspac
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [step, setStep] = useState<"pick" | "sending" | "done">("pick");
+  // Foto recién tomada, esperando el recorte.
+  const [cropping, setCropping] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function choose(picked: File | undefined) {
     if (!picked) return;
     setError(null);
+    // Las fotos pasan primero por el recorte; los PDF van directo.
+    if (picked.type === "application/pdf") return acceptFile(picked);
+    setCropping(picked);
+  }
+
+  function acceptFile(picked: File) {
     setFile(picked);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(picked.type === "application/pdf" ? null : URL.createObjectURL(picked));
@@ -46,6 +55,23 @@ export function PhoneCapture({ token, workspaceName }: { token: string; workspac
       setError(e instanceof Error ? e.message : "No se pudo enviar la foto.");
       setStep("pick");
     }
+  }
+
+  if (cropping) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Recortar la factura</h1>
+        <ImageCropper
+          key={`${cropping.name}-${cropping.size}-${cropping.lastModified}`}
+          file={cropping}
+          onCancel={() => setCropping(null)}
+          onDone={(result) => {
+            setCropping(null);
+            acceptFile(new File([result], "factura.jpg", { type: result.type || "image/jpeg" }));
+          }}
+        />
+      </div>
+    );
   }
 
   if (step === "done") {

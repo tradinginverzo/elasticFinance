@@ -4,8 +4,10 @@ import { LoaderCircleIcon, ReceiptTextIcon, SmartphoneIcon } from "lucide-react"
 import { useRef, useState } from "react";
 
 import { deleteReceipt, scanReceipt, startReceiptUpload } from "@/app/(app)/facturas/actions";
+import { ImageCropper } from "@/components/image-cropper";
 import { PhoneCaptureDialog, type PhoneReceipt } from "@/components/phone-capture-dialog";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { compressImage } from "@/lib/image";
 import type { ReceiptScan } from "@/lib/receipt-types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -45,14 +47,24 @@ export function ReceiptUploader({
     await onUploaded({ ...receipt, scan: result.scan, error: result.error, readingEnabled: result.enabled });
   }
 
-  async function handleFile(file: File) {
+  // Foto elegida, esperando el recorte antes de subirla.
+  const [cropping, setCropping] = useState<File | null>(null);
+
+  // Las fotos pasan primero por el recorte; los PDF se suben directo.
+  function pickFile(file: File) {
+    setError(null);
+    if (file.type === "application/pdf") void handleFile(file);
+    else setCropping(file);
+  }
+
+  async function handleFile(file: Blob) {
     setError(null);
     setStep("uploading");
     let receiptId: string | null = null;
     let uploaded = false;
     try {
       const blob = await compressImage(file);
-      const mimeType = blob.type || file.type;
+      const mimeType = blob.type || file.type || "image/jpeg";
       const started = await startReceiptUpload(mimeType, blob.size);
       if (started.error !== null) throw new Error(started.error);
       receiptId = started.receiptId;
@@ -97,7 +109,7 @@ export function ReceiptUploader({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = ""; // permite elegir el mismo archivo otra vez
-          if (file) void handleFile(file);
+          if (file) pickFile(file);
         }}
       />
       <Button
@@ -127,6 +139,27 @@ export function ReceiptUploader({
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <PhoneCaptureDialog open={phoneOpen} onOpenChange={setPhoneOpen} onReceived={(r) => void handlePhone(r)} />
+
+      <Sheet open={cropping !== null} onOpenChange={(open) => !open && setCropping(null)}>
+        <SheetContent side="bottom" className="max-h-[96dvh] overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <SheetHeader>
+            <SheetTitle>Recortar la factura</SheetTitle>
+          </SheetHeader>
+          {cropping && (
+            <div className="mx-auto w-full max-w-lg px-4">
+              <ImageCropper
+                key={`${cropping.name}-${cropping.size}-${cropping.lastModified}`}
+                file={cropping}
+                onCancel={() => setCropping(null)}
+                onDone={(result) => {
+                  setCropping(null);
+                  void handleFile(result);
+                }}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
